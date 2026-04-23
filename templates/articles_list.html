@@ -1,0 +1,38 @@
+{% for article in articles %}
+<article class="article-card" id="article-{{ article.id }}">
+    <div class="article-content">
+        <span class="article-meta">// {{ article.source_url }}</span>
+        <h2><a href="{{ article.link }}" target="_blank">{{ article.title }}</a></h2>
+        <p>{{ article.description }}</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <button class="btn-action" style="border-color: var(--accent); color: var(--accent);"
+                hx-patch="/api/articles/{{ article.id }}/hold" 
+                hx-target="#article-{{ article.id }}" 
+                hx-swap="outerHTML swap:0.5s"
+                hx-on::after-request="decrementCounter()">
+            <span class="bracket">[+]</span> 
+            {% if lang == 'en' %}hold{% else %}отложить{% endif %}
+        </button>
+        <button class="btn-action"
+            hx-delete="/api/articles/{{ article.id }}"
+            hx-target="#article-{{ article.id }}"
+            hx-swap="outerHTML swap:0.5s"
+            hx-on::after-request="decrementCounter()">
+            <span class="bracket">[</span><span class="check">x</span><span class="bracket">]</span> 
+            {% if lang == 'en' %}purge{% else %}очистить{% endif %}
+        </button>
+    </div>
+</article>
+{% endfor %}
+
+{# МАГИЯ HTMX: Если статьи еще есть, вставляем "невидимый" триггер, который сам запросит следующие 50 #}
+{% if next_offset < total_count %}
+<div id="lazy-trigger-{{ next_offset }}" 
+     hx-get="/?view={{ view }}&offset={{ next_offset }}" 
+     hx-trigger="intersect once" 
+     hx-swap="beforeend"
+     hx-target="#feed-list"
+     hx-indicator="#lazy-trigger-{{ next_offset }}">
+</div>
+{% endif %}

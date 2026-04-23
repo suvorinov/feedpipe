@@ -1,0 +1,36 @@
+        <aside class="sidebar">
+            <!-- Добавили класс feeds-toggle -->
+            <h3 class="feeds-toggle" onclick="document.querySelector('.feeds-wrapper').classList.toggle('collapsed')">
+                // {% if lang == 'en' %}Active Feeds{% else %}Активные фиды{% endif %} ({{ feeds|length }})
+            </h3>
+            
+            <!-- Обернули в блок, который будем схлопывать -->
+            <div class="feeds-wrapper">
+                <input type="text" id="feed-search" class="feed-search" placeholder="{% if lang == 'en' %}Filter...{% else %}Фильтр...{% else %}" oninput="filterFeeds()">
+
+                <ul class="feed-list" id="feed-list">
+                    {% for feed in feeds %}
+                    <li class="feed-item" data-title="{{ feed.title|lower }}">
+                        <span title="{{ feed.url }}">{{ feed.title }}</span>
+                        <button hx-delete="/api/feeds/{{ feed.id }}" hx-target="closest li" hx-swap="outerHTML">DEL</button>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <h3 style="margin-top: 2rem;">// {% if lang == 'en' %}Add Source{% else %}Добавить источник{% endif %}</h3>
+            <form class="add-form" hx-post="/api/feeds" hx-target=".feed-list" hx-swap="innerHTML">
+                <input type="text" name="url" placeholder="{% if lang == 'en' %}URL or RSS link...{% else %}URL сайта или RSS...{% endif %}" required>
+                <button type="submit" class="btn-action" style="margin:0;">
+                    <span class="bracket">[+]</span> 
+                    {% if lang == 'en' %}inject{% else %}{% endif %}
+                </button>
+            </form>
+
+            <button id="sync-btn" class="btn-sync" 
+                    hx-post="/api/sync" 
+                    hx-disabled-elt="this"
+                    hx-target="none">
+                >> {% if lang == 'en' %}sync now{% else %}синхронизировать{% endif %} <<
+            </button>
+        </aside>

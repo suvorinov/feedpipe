@@ -1,0 +1,6 @@
+{% for feed in feeds %}
+<li>
+    <span title="{{ feed.url }}">{{ feed.title }}</span>
+    <button hx-delete="/api/feeds/{{ feed.id }}" hx-target="closest li" hx-swap="outerHTML">DEL</button>
+</li>
+{% endfor %}

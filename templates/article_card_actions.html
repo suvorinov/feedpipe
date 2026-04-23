@@ -1,0 +1,22 @@
+<div class="card-actions">
+    {% if view != 'later' %}
+    <button class="btn-action btn-hold"
+            hx-patch="/api/articles/{{ article.id }}/hold"
+            hx-target="#article-{{ article.id }}"
+            hx-swap="afterend"
+            data-card-id="{{ article.id }}"
+            hx-on::after-request="if(event.detail.successful){ const card=document.getElementById('article-'+this.dataset.cardId); if(card){card.classList.add('just-held'); setTimeout(()=>card.remove(),300);} decrementCounter(); }">
+        <span class="bracket">[+]</span>
+        {% if lang == 'en' %}hold{% else %}отложить{% endif %}
+    </button>
+    {% endif %}
+    <button class="btn-action btn-purge"
+            hx-delete="/api/articles/{{ article.id }}"
+            hx-target="#article-{{ article.id }}"
+            hx-swap="afterend"
+            data-card-id="{{ article.id }}"
+            hx-on::after-request="if(event.detail.successful){ const card=document.getElementById('article-'+this.dataset.cardId); if(card){card.classList.add('removing'); setTimeout(()=>card.remove(),300);} decrementCounter(); }">
+        <span class="bracket">[x]</span>
+        {% if lang == 'en' %}purge{% else %}очистить{% endif %}
+    </button>
+</div>

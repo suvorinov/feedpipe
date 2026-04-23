@@ -1,0 +1,6 @@
+<button id="sync-btn" class="btn-sync"
+        hx-post="/api/sync"
+        hx-disabled-elt="this"
+        hx-target="none">
+    >> {% if lang == 'en' %}sync now{% else %}синхронизировать{% endif %} <<
+</button>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru" data-lang="{{ lang }}" data-view="{{ view }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FEEDPIPE // SYSTEM INTERFACE</title>
+    <!--
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.js" integrity="sha384-Q+Dky3iHVJOr6wUjQ4ulh6uQ76an/t+ak1+PjMVaxRjbZamFLAG+u9InkfjbsEQf" crossorigin="anonymous"></script>
+
+    <!--
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/loading-states.js"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/class-tools.js"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/multi-swap.js"></script>
+    -->
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="manifest" href="/manifest.json">
+    <!-- Это заставит мобильный Safari и Chrome раскрасить строку состояния в цвет темы -->
+    <meta name="theme-color" content="#00ff9d"> 
+
+    <script src="/static/script.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>> feed<span>pipe</span></h1>
+            <div class="header-right">
+                <div class="lang-switcher">
+                    <button class="lang-btn {% if lang == 'ru' %}active{% endif %}" onclick="changeLang('ru')">RU</button>
+                    <button class="lang-btn {% if lang == 'en' %}active{% endif %}" onclick="changeLang('en')">EN</button>
+                </div>
+                <div class="system-info">
+                    {% if lang == 'en' %}
+                    SYS.STATUS: ONLINE<br>
+                    INBOX: <span id="inbox-count">{{ total_count }}</span><br>
+                    <span class="auto-badge">AUTO</span>
+                    {% else %}
+                    СИСТЕМА: АКТИВНА<br>
+                    ВХОДЯЩИЕ: <span id="inbox-count">{{ total_count }}</span><br>
+                    <span class="auto-badge">АВТО</span>
+                    {% endif %}
+                </div>
+                <div id="sync-status" class="sync-status">
+                    {% if lang == 'en' %}NEXT SYNC: 30 MIN{% else %}СЛЕДУЮЩИЙ: ЧЕРЕЗ 30 МИН{% endif %}
+                </div>
+            </div>
+        </header>
+
+        {% include "nav_tabs.html" %}
+
+        <main id="feed-list" style="grid-column: 1;">
+            {% for article in articles %}
+                {% include "article_card.html" %}
+            {% else %}
+                {% include "empty_state.html" %}
+            {% endfor %}
+
+            {# Триггер бесконечной прокрутки #}
+            {% if next_offset < total_count %}
+            <div id="lazy-trigger-0" 
+                hx-get="/?view={{ view }}&offset={{ next_offset }}" 
+                hx-trigger="intersect once" 
+                hx-swap="beforeend"
+                hx-target="#feed-list">
+            </div>
+            {% endif %}
+        </main>
+
+        <aside class="sidebar">
+            {% include "sidebar_feed_list.html" %}
+
+            {% include "sidebar_add_source.html" %}
+
+            {% include "sidebar_sync_btn.html" %}
+        </aside>
+
+    </div>
+
+
+    <!-- КНОПКА "НАВЕРХ" -->
+    <button id="btn-top" class="btn-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+        &uarr; <!-- HTML-символ стрелки вверх -->
+    </button
+</body>
+</html>

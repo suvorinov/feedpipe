@@ -1,0 +1,10 @@
+<nav class="nav-tabs">
+    <a href="/" {% if view == 'inbox' %}class="active"{% endif %}>
+        // {% if lang == 'en' %}Inbox{% else %}Входящие{% endif %} 
+        (<span id="nav-tabs-inbox-count">{{ total_count }}</span>)
+    </a>
+    <a href="/?view=later" {% if view == 'later' %}class="active"{% endif %}>
+        // {% if lang == 'en' %}Read Later{% else %}Отложенные{% endif %} 
+        (<span id="nav-tabs-inbox-later">{{ later_count }}</span>)
+    </a>
+</nav>

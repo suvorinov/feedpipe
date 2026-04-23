@@ -1,0 +1,8 @@
+<h3>// {% if lang == 'en' %}Add Source{% else %}Добавить источник{% endif %}</h3>
+<form class="add-form" hx-post="/api/feeds" hx-target=".feed-list" hx-swap="innerHTML">
+    <input type="text" name="url" placeholder="{% if lang == 'en' %}URL or RSS link...{% else %}URL сайта или RSS...{% endif %}" required>
+    <button type="submit" class="btn-action" style="margin:0;">
+        <span class="bracket">[+]</span>
+        {% if lang == 'en' %}inject{% else %}добавить{% endif %}
+    </button>
+</form>

@@ -1,0 +1,13 @@
+services:
+  feedpipe:
+    build: .
+    container_name: feedpipe
+    ports:
+      - "8700:8000"
+    volumes:
+      - ./app/data:/app/app/data
+      - ./templates:/app/templates:ro
+      - ./static:/app/static:ro
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Moscow
