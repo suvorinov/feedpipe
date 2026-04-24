@@ -242,6 +242,18 @@ h1 span { color: var(--accent); }
     box-shadow: 0 0 15px rgba(0, 255, 157, 0.4);
 }
 
+.btn-action.btn-restore:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.4);
+}
+
+.btn-action.btn-add:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.4);
+}
+
 .btn-action.btn-purge:hover {
     border-color: var(--danger);
     color: var(--danger);
@@ -358,6 +370,22 @@ h1 span { color: var(--accent); }
 .add-form input { background: var(--bg-base); border: 1px solid var(--grid-line); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono); font-size: 0.8rem; }
 .add-form input:focus { outline: 1px solid var(--accent); }
 
+.feed-error {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--danger);
+    padding: 0.5rem;
+    border: 1px solid var(--danger);
+    background: rgba(255, 51, 51, 0.1);
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+.feed-error.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 .btn-sync {
     width: 100%;
     margin-top: 1rem;
@@ -373,6 +401,31 @@ h1 span { color: var(--accent); }
 }
 .btn-sync:hover:not(:disabled) { background: var(--accent); color: var(--bg-base); }
 .btn-sync:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.load-more-wrapper {
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.btn-load-more {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    background: transparent;
+    border: 1px dashed var(--grid-line);
+    color: var(--text-muted);
+    padding: 0.8rem 2rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-load-more:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    border-style: solid;
+}
+.btn-load-more.htmx-request {
+    opacity: 0.5;
+}
 
 .empty-state { text-align: center; padding: 4rem 0; font-family: var(--font-mono); color: var(--text-muted); }
 .empty-state code { display: block; font-size: 1.2rem; color: var(--accent); margin-bottom: 1rem; }

@@ -29,6 +29,9 @@ function connectWebSocket() {
             isSyncing = false;
             updateSyncStatus();
         }
+        else if (data.type === 'counter_update') {
+            updateCountersFromBroadcast(data.inbox_count, data.later_count);
+        }
     };
 
     ws.onclose = function() {
@@ -86,6 +89,34 @@ function decrementCounter() {
     }
 }
 
+function incrementCounter() {
+    el = document.getElementById('inbox-count');
+    if (el) {
+        const current = parseInt(el.textContent) || 0;
+        el.textContent = current + 1;
+    }
+
+    el = document.getElementById('nav-tabs-inbox-count');
+    if (el) {
+        const current = parseInt(el.textContent) || 0;
+        el.textContent = current + 1;
+    }
+
+    el = document.getElementById('nav-tabs-inbox-later');
+    if (el) {
+        const current = parseInt(el.textContent) || 0;
+        el.textContent = Math.max(0, current - 1);
+    }
+}
+
+function updateCountersFromBroadcast(inbox, later) {
+    const inboxEl = document.getElementById('inbox-count');
+    if (inboxEl) inboxEl.textContent = inbox;
+
+    const laterEl = document.getElementById('nav-tabs-inbox-later');
+    if (laterEl) laterEl.textContent = later;
+}
+
 function animateRemove(el, className) {
     el.classList.add(className);
     setTimeout(() => el.remove(), 300);
@@ -104,6 +135,17 @@ function flashSyncButton() {
 function changeLang(lang) {
     document.cookie = "feedpipe_lang=" + lang + ";path=/;max-age=31536000";
     window.location.href = '/?lang=' + lang;
+}
+
+function showFeedError(message) {
+    const errorEl = document.getElementById('feed-error');
+    if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.classList.add('visible');
+        setTimeout(() => {
+            errorEl.classList.remove('visible');
+        }, 5000);
+    }
 }
 
 // === ЛОГИКА ФИЛЬТРАЦИИ ФИДОВ ===

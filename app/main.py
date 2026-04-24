@@ -17,7 +17,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import os
@@ -211,7 +211,8 @@ def read_root(
         "feeds": feeds,
         "lang": current_lang,
         "view": view,
-        "next_offset": offset + 50  # <-- ДОБАВИЛИ ЭТО
+        "view_count": later_count if view == "later" else inbox_count,
+        "next_offset": offset + 50
     }
     
     is_htmx_request = request.headers.get("HX-Request") == "true"
@@ -229,19 +230,46 @@ def read_root(
         response.set_cookie(key="feedpipe_lang", value=lang, max_age=31536000)
         return response
 
-@app.delete("/api/articles/{article_id}")
-def purge_article(article_id: int, db: sqlite3.Connection = Depends(get_db)):
-    cursor = db.execute("UPDATE articles SET status='archived' WHERE id = ?", (article_id,))
+@app.patch("/api/articles/{article_id}/status")
+async def update_article_status(
+    article_id: int,
+    status: str,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    valid_statuses = ("inbox", "later", "archived")
+    if status not in valid_statuses:
+        raise HTTPException(400, f"Invalid status. Must be one of: {valid_statuses}")
+
+    cursor = db.execute(
+        "UPDATE articles SET status = ? WHERE id = ? AND status != ?",
+        (status, article_id, status)
+    )
     db.commit()
-    if cursor.rowcount == 0: raise HTTPException(404)
+    if cursor.rowcount == 0:
+        raise HTTPException(404, "Article not found or already has this status")
+
+    inbox_count = db.execute("SELECT COUNT(*) FROM articles WHERE status='inbox'").fetchone()[0]
+    later_count = db.execute("SELECT COUNT(*) FROM articles WHERE status='later'").fetchone()[0]
+
+    await manager.broadcast({
+        "type": "counter_update",
+        "inbox_count": inbox_count,
+        "later_count": later_count
+    })
+
     return HTMLResponse(content="", status_code=200)
+
+@app.delete("/api/articles/{article_id}")
+def delete_article(article_id: int, db: sqlite3.Connection = Depends(get_db)):
+    return update_article_status(article_id, "archived", db)
 
 @app.patch("/api/articles/{article_id}/hold")
 def hold_article(article_id: int, db: sqlite3.Connection = Depends(get_db)):
-    cursor = db.execute("UPDATE articles SET status='later' WHERE id = ? AND status='inbox'", (article_id,))
-    db.commit()
-    if cursor.rowcount == 0: raise HTTPException(404)
-    return HTMLResponse(content="", status_code=200)
+    return update_article_status(article_id, "later", db)
+
+@app.patch("/api/articles/{article_id}/restore")
+def restore_article(article_id: int, db: sqlite3.Connection = Depends(get_db)):
+    return update_article_status(article_id, "inbox", db)
 
 @app.post("/api/feeds")
 async def add_feed(
@@ -253,15 +281,15 @@ async def add_feed(
     url = form.get("url")
 
     if not url:
-        raise HTTPException(400, "Нет URL")
+        return JSONResponse(status_code=400, content={"error": "Нет URL!"})
 
     # --- Валидация URL ---
     from urllib.parse import urlparse
     parsed_url = urlparse(url)
     if not parsed_url.scheme or not parsed_url.netloc:
-        raise HTTPException(400, "Неверный URL")
+        return JSONResponse(status_code=400, content={"error": "Неверный URL!"})
     if parsed_url.scheme not in ("http", "https"):
-        raise HTTPException(400, "Поддерживаются только HTTP и HTTPS")
+        return JSONResponse(status_code=400, content={"error": "Поддерживаются только HTTP и HTTPS!"})
 
     # --- Авто-дискавери RSS ---
     if not url.endswith(".xml") and not url.endswith("/rss") and "feed" not in url:
@@ -283,23 +311,49 @@ async def add_feed(
         except Exception:
             pass
 
-    # --- Получение заголовка фида ---
+    # --- Получение заголовка фида и валидация ---
+    import feedparser
+    headers = {"User-Agent": "Feedpipe/1.0"}
     try:
-        import feedparser
-        headers = {"User-Agent": "Feedpipe/1.0"}
         async with httpx.AsyncClient(headers=headers) as client:
-            resp = await client.get(url, timeout=5.0, follow_redirects=True)
+            resp = await client.get(url, timeout=10.0, follow_redirects=True)
             parsed = feedparser.parse(resp.text)
+
+            if parsed.bozo and not parsed.entries:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": f"Фид повреждён или пуст: {str(parsed.bozo_exception)[:100]}!"}
+                )
+
             title = parsed.feed.get("title", url)
-    except:
-        title = url
+    except httpx.TimeoutException:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Таймаут при получении фида!"}
+        )
+    except httpx.HTTPStatusError as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Ошибка HTTP: {e.response.status_code}!"}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Не удалось распознать фид: {str(e)[:100]}!"}
+        )
 
     # --- Сохранение в БД ---
     try:
         db.execute("INSERT INTO feeds (url, title) VALUES (?, ?)", (url, title))
         db.commit()
     except sqlite3.IntegrityError:
-        raise HTTPException(409, "Уже подписан")
+        return JSONResponse(
+            status_code=409,
+            content={"error": "Уже подписан!"}
+        )
+
+    # Запускаем парсер в фоне
+    background_tasks.add_task(run_parser_async)
 
     # Запускаем парсер в фоне
     background_tasks.add_task(run_parser_async)

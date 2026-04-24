@@ -4,4 +4,7 @@ __pycache__
 *.pyc
 .git
 .env
-feedpipe.db
+app/data/
+*.db
+*.db-wal
+*.db-shm

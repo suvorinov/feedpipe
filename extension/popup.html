@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            width: 300px;
+            padding: 15px;
+            background-color: #0e0e0e;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        h3 { color: #00ff9d; font-size: 14px; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 5px;}
+        p { color: #666; font-size: 11px; }
+        button {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+            background: transparent;
+            color: #00ff9d;
+            border: 1px solid #00ff9d;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+        button:hover { background: #00ff9d; color: #0e0e0e; }
+        #status { margin-top: 10px; font-size: 11px; }
+        .success { color: #00ff9d; }
+        .error { color: #ff3333; }
+    </style>
+</head>
+<body>
+    <h3>> Feedpipe</h3>
+    <p id="url-display">Определение URL...</p>
+    <button id="inject-btn">[ + ] inject</button>
+    <div id="status"></div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

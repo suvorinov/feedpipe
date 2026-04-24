@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Feedpipe Injector",
+  "version": "1.0",
+  "description": "Добавить текущий сайт в Feedpipe RSS",
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "../static/favicon.svg"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ]
+}

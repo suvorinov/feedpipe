@@ -1,7 +1,7 @@
 <div class="card-actions">
     {% if view != 'later' %}
     <button class="btn-action btn-hold"
-            hx-patch="/api/articles/{{ article.id }}/hold"
+            hx-patch="/api/articles/{{ article.id }}/status?status=later"
             hx-target="#article-{{ article.id }}"
             hx-swap="afterend"
             data-card-id="{{ article.id }}"
@@ -9,9 +9,19 @@
         <span class="bracket">[+]</span>
         {% if lang == 'en' %}hold{% else %}отложить{% endif %}
     </button>
+    {% else %}
+    <button class="btn-action btn-restore"
+            hx-patch="/api/articles/{{ article.id }}/status?status=inbox"
+            hx-target="#article-{{ article.id }}"
+            hx-swap="afterend"
+            data-card-id="{{ article.id }}"
+            hx-on::after-request="if(event.detail.successful){ const card=document.getElementById('article-'+this.dataset.cardId); if(card){card.classList.add('just-held'); setTimeout(()=>card.remove(),300);} incrementCounter(); }">
+        <span class="bracket">&lt;-</span>
+        {% if lang == 'en' %}restore{% else %}вернуть{% endif %}
+    </button>
     {% endif %}
     <button class="btn-action btn-purge"
-            hx-delete="/api/articles/{{ article.id }}"
+            hx-patch="/api/articles/{{ article.id }}/status?status=archived"
             hx-target="#article-{{ article.id }}"
             hx-swap="afterend"
             data-card-id="{{ article.id }}"

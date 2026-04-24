@@ -39,6 +39,10 @@ def init_db():
         )
     ''')
 
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source_url)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at)')
+
     conn.commit()
     conn.close()
 
