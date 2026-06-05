@@ -3,7 +3,6 @@ import email.utils
 import logging
 import httpx
 import feedparser
-import sqlite3
 import re
 from datetime import datetime, timezone
 
@@ -13,6 +12,9 @@ CONCURRENT_LIMIT = 10
 logger = logging.getLogger(__name__)
 
 from .db import get_db, init_db, migrate_feeds_txt
+from .repositories.articles import ArticleRepository
+from .repositories.feeds import FeedRepository
+
 
 async def save_articles(articles: list[dict], retries: int = 3) -> int:
     if not articles:
@@ -22,31 +24,11 @@ async def save_articles(articles: list[dict], retries: int = 3) -> int:
         conn = None
         try:
             conn = get_db()
-            cursor = conn.cursor()
-            saved_count = 0
-
-            for article in articles:
-                try:
-                    cursor.execute('''
-                        INSERT OR IGNORE INTO articles
-                        (title, link, description, published_at, source_url, status)
-                        VALUES (?, ?, ?, ?, ?, 'inbox')
-                    ''', (
-                        article['title'],
-                        article['link'],
-                        article['description'],
-                        article['published_at'],
-                        article['source_url']
-                    ))
-                    if cursor.rowcount > 0:
-                        saved_count += 1
-                except sqlite3.Error as e:
-                    logger.error(f"Ошибка БД при сохранении {article['link']}: {e}")
-
-            conn.commit()
+            repo = ArticleRepository(conn)
+            saved_count = repo.bulk_insert(articles)
             conn.close()
             return saved_count
-        except sqlite3.OperationalError as e:
+        except Exception as e:
             if "locked" in str(e).lower() and attempt < retries - 1:
                 await asyncio.sleep(0.5 * (attempt + 1))
                 continue
@@ -140,9 +122,8 @@ async def main():
     migrate_feeds_txt()
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT url FROM feeds")
-    urls = [row['url'] for row in cursor.fetchall()]
+    feed_repo = FeedRepository(conn)
+    urls = feed_repo.get_all_urls()
     conn.close()
 
     if not urls:
@@ -164,9 +145,8 @@ async def main():
     new_saved = await save_articles(all_articles)
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM articles WHERE status='inbox'")
-    inbox_count = cursor.fetchone()[0]
+    repo = ArticleRepository(conn)
+    inbox_count = repo.get_inbox_count()
     conn.close()
 
     logger.info(f"Всего найдено статей: {len(all_articles)}")
