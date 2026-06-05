@@ -1,9 +1,13 @@
 import asyncio
-import html
+import logging
+import re
 import sqlite3
-import tempfile
 from datetime import datetime
+from contextlib import asynccontextmanager
+from typing import Optional
+from urllib.parse import urljoin, urlparse
 
+import feedparser
 import httpx
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -17,30 +21,62 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import os
 
-# В app/main.py должно быть так:
 from .db import get_db, init_db
+from .auth import hash_passphrase, verify_passphrase
 from .parser import main as parser_main
 
-app = FastAPI(title="Feedpipe API")
+
+def get_current_user(request: Request) -> str:
+    user = request.cookies.get("feedpipe_user")
+    if not user:
+        if request.headers.get("HX-Request") == "true":
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized",
+                headers={"HX-Redirect": "/login"},
+            )
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return user
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+
+scheduler = BackgroundScheduler()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    scheduler.add_job(
+        fire_and_forget_sync,
+        IntervalTrigger(minutes=30),
+        id="auto_sync",
+        replace_existing=True,
+    )
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.shutdown()
+
+app = FastAPI(title="Feedpipe API", lifespan=lifespan)
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 @app.get("/manifest.json", include_in_schema=False)
-async def manifest():
+async def manifest() -> FileResponse:
     return FileResponse(os.path.join(ROOT_DIR, "manifest.json"))
 
-def format_date(value):
+def format_date(value: datetime | str | None) -> str:
     if not value:
         return ""
-    from datetime import datetime
     if isinstance(value, str):
         try:
             value = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except:
+        except ValueError:
             return value
     now = datetime.now()
     diff = now - value
@@ -71,8 +107,6 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 if os.path.exists(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-init_db()
-
 SYNC_STATUS = {
     "is_running": False,
     "last_sync": None,
@@ -91,7 +125,7 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
 
-    async def broadcast(self, message: dict):
+    async def broadcast(self, message: dict) -> None:
         disconnected = []
         for connection in self.active_connections:
             try:
@@ -103,7 +137,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-async def run_parser_async():
+async def run_parser_async() -> None:
     global SYNC_STATUS
     if SYNC_STATUS["is_running"]:
         return
@@ -128,12 +162,12 @@ async def run_parser_async():
             "timestamp": SYNC_STATUS["last_sync"],
         })
     except Exception as e:
-        print(f"Parser error: {e}")
+        logger.error(f"Parser error: {e}")
         await manager.broadcast({"type": "sync_error", "error": str(e)})
     finally:
         SYNC_STATUS["is_running"] = False
 
-def fire_and_forget_sync():
+def fire_and_forget_sync() -> None:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -146,18 +180,7 @@ def fire_and_forget_sync():
     else:
         asyncio.run(run_parser_async())
 
-scheduler = BackgroundScheduler()
-scheduler.add_job(
-    fire_and_forget_sync,
-    IntervalTrigger(minutes=30),
-    id="auto_sync",
-    replace_existing=True,
-)
-scheduler.start()
 
-@app.on_event("shutdown")
-def shutdown_event():
-    scheduler.shutdown()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -176,13 +199,16 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/", response_class=HTMLResponse)
 def read_root(
-    request: Request, 
+    request: Request,
     db: sqlite3.Connection = Depends(get_db),
-    lang: str = None,
-    feedpipe_lang: str = Cookie(None),
+    lang: Optional[str] = None,
+    feedpipe_lang: Optional[str] = Cookie(None),
     view: str = "inbox",
-    offset: int = 0 
-):
+    offset: int = 0,
+    feedpipe_user: Optional[str] = Cookie(None),
+) -> HTMLResponse:
+    user = feedpipe_user
+    is_auth = bool(user)
     current_lang = lang or feedpipe_lang or "ru"
     
     inbox_count = db.execute("SELECT COUNT(*) FROM articles WHERE status='inbox'").fetchone()[0]
@@ -203,8 +229,14 @@ def read_root(
     articles = [dict(row) for row in cursor.fetchall()]
     feeds = [dict(row) for row in db.execute("SELECT id, url, title FROM feeds ORDER BY id DESC").fetchall()]
 
+    if not is_auth:
+        response = templates.TemplateResponse("login.html", {"request": request, "error": None})
+        if lang:
+            response.set_cookie(key="feedpipe_lang", value=lang, max_age=31536000)
+        return response
+
     context = {
-        "request": request, 
+        "request": request,
         "articles": articles,
         "total_count": inbox_count,
         "later_count": later_count,
@@ -212,30 +244,27 @@ def read_root(
         "lang": current_lang,
         "view": view,
         "view_count": later_count if view == "later" else inbox_count,
-        "next_offset": offset + 50
+        "next_offset": offset + 50,
+        "user": user,
     }
     
     is_htmx_request = request.headers.get("HX-Request") == "true"
 
     if is_htmx_request:
-        # Если это HTMX — отдаем ТОЛЬКО список статей и триггер
-        return templates.TemplateResponse("articles_list.html", context)
+        response = templates.TemplateResponse("articles_list.html", context)
     else:
-        # Если это обычный заход в браузере — отдаем полноценную страницу
-        return templates.TemplateResponse("index.html", context)
-    
-    # Куки ставим в любом случае (FastAPI умеет ставить куки даже на HTMLResponse)
-    if lang:
-        response = templates.TemplateResponse("articles_list.html" if is_htmx_request else "index.html", context)
-        response.set_cookie(key="feedpipe_lang", value=lang, max_age=31536000)
-        return response
+        response = templates.TemplateResponse("index.html", context)
 
-@app.patch("/api/articles/{article_id}/status")
-async def update_article_status(
+    if lang:
+        response.set_cookie(key="feedpipe_lang", value=lang, max_age=31536000)
+
+    return response
+
+async def _update_article_status(
     article_id: int,
     status: str,
-    db: sqlite3.Connection = Depends(get_db)
-):
+    db: sqlite3.Connection,
+) -> HTMLResponse:
     valid_statuses = ("inbox", "later", "archived")
     if status not in valid_statuses:
         raise HTTPException(400, f"Invalid status. Must be one of: {valid_statuses}")
@@ -259,22 +288,34 @@ async def update_article_status(
 
     return HTMLResponse(content="", status_code=200)
 
+
+@app.patch("/api/articles/{article_id}/status")
+async def update_article_status(
+    article_id: int,
+    status: str,
+    user: str = Depends(get_current_user),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    return await _update_article_status(article_id, status, db)
+
+
 @app.delete("/api/articles/{article_id}")
-def delete_article(article_id: int, db: sqlite3.Connection = Depends(get_db)):
-    return update_article_status(article_id, "archived", db)
+async def delete_article(article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    return await _update_article_status(article_id, "archived", db)
 
 @app.patch("/api/articles/{article_id}/hold")
-def hold_article(article_id: int, db: sqlite3.Connection = Depends(get_db)):
-    return update_article_status(article_id, "later", db)
+async def hold_article(article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    return await _update_article_status(article_id, "later", db)
 
 @app.patch("/api/articles/{article_id}/restore")
-def restore_article(article_id: int, db: sqlite3.Connection = Depends(get_db)):
-    return update_article_status(article_id, "inbox", db)
+async def restore_article(article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+    return await _update_article_status(article_id, "inbox", db)
 
 @app.post("/api/feeds")
 async def add_feed(
     request: Request,
     background_tasks: BackgroundTasks,
+    user: str = Depends(get_current_user),
     db: sqlite3.Connection = Depends(get_db),
 ):
     form = await request.form()
@@ -284,7 +325,6 @@ async def add_feed(
         return JSONResponse(status_code=400, content={"error": "Нет URL!"})
 
     # --- Валидация URL ---
-    from urllib.parse import urlparse
     parsed_url = urlparse(url)
     if not parsed_url.scheme or not parsed_url.netloc:
         return JSONResponse(status_code=400, content={"error": "Неверный URL!"})
@@ -297,7 +337,6 @@ async def add_feed(
             headers = {"User-Agent": "Feedpipe/1.0"}
             async with httpx.AsyncClient(headers=headers) as client:
                 resp = await client.get(url, timeout=5.0, follow_redirects=True)
-                import re
                 match = re.search(
                     r'<link[^>]+type="application/(?:rss|atom)\+xml"[^>]+href="([^"]+)"',
                     resp.text, re.IGNORECASE,
@@ -305,14 +344,12 @@ async def add_feed(
                 if match:
                     found_rss = match.group(1)
                     if found_rss.startswith("/"):
-                        from urllib.parse import urljoin
                         found_rss = urljoin(url, found_rss)
                     url = found_rss
         except Exception:
             pass
 
     # --- Получение заголовка фида и валидация ---
-    import feedparser
     headers = {"User-Agent": "Feedpipe/1.0"}
     try:
         async with httpx.AsyncClient(headers=headers) as client:
@@ -352,10 +389,6 @@ async def add_feed(
             content={"error": "Уже подписан!"}
         )
 
-    # Запускаем парсер в фоне
-    background_tasks.add_task(run_parser_async)
-
-    # Запускаем парсер в фоне
     background_tasks.add_task(run_parser_async)
 
     # --- МАГИЯ: Просим Jinja2 отрендерить ТОЛЬКО список фидов ---
@@ -366,17 +399,61 @@ async def add_feed(
     )
 
 @app.delete("/api/feeds/{feed_id}")
-def delete_feed(feed_id: int, db: sqlite3.Connection = Depends(get_db)):
+def delete_feed(feed_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
     db.execute("DELETE FROM feeds WHERE id = ?", (feed_id,))
     db.commit()
     return HTMLResponse(content="", status_code=200)
 
 @app.post("/api/sync")
-async def trigger_sync():
+async def trigger_sync(user: str = Depends(get_current_user)) -> dict:
     asyncio.create_task(run_parser_async())
     return {"status": "sync_started", "is_running": SYNC_STATUS["is_running"]}
 
 @app.get("/api/status")
-def get_status():
+def get_status(user: str = Depends(get_current_user)) -> dict:
     return SYNC_STATUS
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(
+    request: Request,
+    error: Optional[str] = None,
+    feedpipe_user: Optional[str] = Cookie(None),
+) -> HTMLResponse:
+    if feedpipe_user:
+        return RedirectResponse(url="/", status_code=303)
+    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+
+@app.post("/api/auth")
+async def handle_auth(request: Request, db: sqlite3.Connection = Depends(get_db)) -> HTMLResponse:
+    form = await request.form()
+    username = form.get("username", "").strip().lower()
+    passphrase = form.get("passphrase", "").strip()
+
+    if not username or not passphrase:
+        return templates.TemplateResponse("login.html", {"request": request, "error": "Заполните все поля"})
+
+    user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+
+    if user:
+        if not verify_passphrase(passphrase, user['secret_hash']):
+            return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid key"})
+    else:
+        hashed = hash_passphrase(passphrase)
+        db.execute("INSERT INTO users (username, secret_hash) VALUES (?, ?)", (username, hashed))
+        db.commit()
+
+    response = RedirectResponse(url="/", status_code=303)
+    response.headers["HX-Redirect"] = "/"
+    response.set_cookie(
+        key="feedpipe_user", value=username, max_age=30*24*3600,
+        httponly=True, samesite="lax",
+    )
+    return response
+
+@app.post("/api/logout")
+def logout() -> RedirectResponse:
+    response = RedirectResponse(url="/login", status_code=303)
+    response.headers["HX-Redirect"] = "/login"
+    response.delete_cookie("feedpipe_user")
+    return response
 

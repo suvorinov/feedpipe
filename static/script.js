@@ -1,6 +1,6 @@
 let ws = null;
 let isSyncing = false;
-let lastCount = 0;
+
 
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -11,7 +11,6 @@ function connectWebSocket() {
 
         if (data.type === 'status') {
             isSyncing = data.is_running;
-            lastCount = data.count;
             updateSyncStatus();
         }
         else if (data.type === 'sync_start') {
@@ -20,7 +19,6 @@ function connectWebSocket() {
         }
         else if (data.type === 'sync_complete') {
             isSyncing = false;
-            lastCount = data.count;
             updateSyncStatus();
             updateCounter(data.count);
             flashSyncButton();
@@ -45,16 +43,11 @@ function updateSyncStatus() {
     const isEnglish = document.body.dataset.lang === 'en';
 
     if (isSyncing) {
-        statusEl.innerHTML = `
-            <span class="sync-spinner"></span>
-            ${isEnglish ? 'SYNC IN PROGRESS...' : 'СИНХРОНИЗАЦИЯ...'}
-        `;
+        statusEl.textContent = isEnglish ? 'SYNC IN PROGRESS...' : 'СИНХРОНИЗАЦИЯ...';
         statusEl.className = 'sync-status syncing';
         btnEl.disabled = true;
     } else {
-        statusEl.innerHTML = `
-            ${isEnglish ? 'NEXT SYNC: 30 MIN' : 'СЛЕДУЮЩИЙ: ЧЕРЕЗ 30 МИН'}
-        `;
+        statusEl.textContent = isEnglish ? 'NEXT SYNC: 30 MIN' : 'СЛЕДУЮЩИЙ: ЧЕРЕЗ 30 МИН';
         statusEl.className = 'sync-status';
         btnEl.disabled = false;
     }
@@ -70,42 +63,42 @@ function updateCounter(count) {
 }
 
 function decrementCounter() {
-    el = document.getElementById('inbox-count');
-    if (el) {
-        const current = parseInt(el.textContent) || 0;
-        el.textContent = Math.max(0, current - 1);
+    const inboxEl = document.getElementById('inbox-count');
+    if (inboxEl) {
+        const current = parseInt(inboxEl.textContent) || 0;
+        inboxEl.textContent = Math.max(0, current - 1);
     }
 
-    el = document.getElementById('nav-tabs-inbox-count');
-    if (el) {
-        const current = parseInt(el.textContent) || 0;
-        el.textContent = Math.max(0, current - 1);
+    const navInboxEl = document.getElementById('nav-tabs-inbox-count');
+    if (navInboxEl) {
+        const current = parseInt(navInboxEl.textContent) || 0;
+        navInboxEl.textContent = Math.max(0, current - 1);
     }
 
-    el = document.getElementById('nav-tabs-inbox-later');
-    if (el) {
-        const current = parseInt(el.textContent) || 0;
-        el.textContent = Math.max(0, current + 1);
+    const navLaterEl = document.getElementById('nav-tabs-inbox-later');
+    if (navLaterEl) {
+        const current = parseInt(navLaterEl.textContent) || 0;
+        navLaterEl.textContent = Math.max(0, current + 1);
     }
 }
 
 function incrementCounter() {
-    el = document.getElementById('inbox-count');
-    if (el) {
-        const current = parseInt(el.textContent) || 0;
-        el.textContent = current + 1;
+    const inboxEl = document.getElementById('inbox-count');
+    if (inboxEl) {
+        const current = parseInt(inboxEl.textContent) || 0;
+        inboxEl.textContent = current + 1;
     }
 
-    el = document.getElementById('nav-tabs-inbox-count');
-    if (el) {
-        const current = parseInt(el.textContent) || 0;
-        el.textContent = current + 1;
+    const navInboxEl = document.getElementById('nav-tabs-inbox-count');
+    if (navInboxEl) {
+        const current = parseInt(navInboxEl.textContent) || 0;
+        navInboxEl.textContent = current + 1;
     }
 
-    el = document.getElementById('nav-tabs-inbox-later');
-    if (el) {
-        const current = parseInt(el.textContent) || 0;
-        el.textContent = Math.max(0, current - 1);
+    const navLaterEl = document.getElementById('nav-tabs-inbox-later');
+    if (navLaterEl) {
+        const current = parseInt(navLaterEl.textContent) || 0;
+        navLaterEl.textContent = Math.max(0, current - 1);
     }
 }
 
@@ -115,11 +108,6 @@ function updateCountersFromBroadcast(inbox, later) {
 
     const laterEl = document.getElementById('nav-tabs-inbox-later');
     if (laterEl) laterEl.textContent = later;
-}
-
-function animateRemove(el, className) {
-    el.classList.add(className);
-    setTimeout(() => el.remove(), 300);
 }
 
 function flashSyncButton() {

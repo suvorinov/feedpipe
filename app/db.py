@@ -8,42 +8,47 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 DB_PATH = os.path.join(DATA_DIR, "feedpipe.db")
 
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS articles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
+    link TEXT UNIQUE,
+    description TEXT,
+    published_at TIMESTAMP,
+    source_url TEXT,
+    status TEXT DEFAULT 'inbox'
+);
+CREATE TABLE IF NOT EXISTS feeds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT UNIQUE,
+    title TEXT
+);
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    secret_hash TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
+CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source_url);
+CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
+"""
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("SELECT 1 FROM articles LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.executescript(SCHEMA_SQL)
+        conn.commit()
+
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False, isolation_level="DEFERRED")
     conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
+    _ensure_schema(conn)
     return conn
 
 def init_db():
-    """Инициализирует БД правильной структурой"""
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS articles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            link TEXT UNIQUE,
-            description TEXT,
-            published_at TIMESTAMP,
-            source_url TEXT,
-            status TEXT DEFAULT 'inbox'
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS feeds (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT UNIQUE,
-            title TEXT
-        )
-    ''')
-
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source_url)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at)')
-
-    conn.commit()
+    conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level="DEFERRED")
+    conn.executescript(SCHEMA_SQL)
     conn.close()
 
 def migrate_feeds_txt():
@@ -62,7 +67,8 @@ def migrate_feeds_txt():
             if line and not line.startswith("#"):
                 try:
                     cursor.execute("INSERT OR IGNORE INTO feeds (url) VALUES (?)", (line,))
-                except: pass
+                except Exception:
+                    pass
                 
     conn.commit()
     conn.close()

@@ -4,16 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FEEDPIPE // SYSTEM INTERFACE</title>
-    <!--
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    -->
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.js" integrity="sha384-Q+Dky3iHVJOr6wUjQ4ulh6uQ76an/t+ak1+PjMVaxRjbZamFLAG+u9InkfjbsEQf" crossorigin="anonymous"></script>
-
-    <!--
-    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/loading-states.js"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/class-tools.js"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/multi-swap.js"></script>
-    -->
     <link rel="stylesheet" href="/static/style.css">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="manifest" href="/manifest.json">
@@ -27,7 +18,10 @@
     <div class="container">
         <header>
             <h1>> feed<span>pipe</span></h1>
-            <div class="header-right">
+                <div class="header-right">
+                    <form action="/api/logout" method="POST" style="display:inline; margin-right: 10px;">
+                        <button type="submit" style="background:transparent; border:1px solid #ff3333; color:#ff3333; padding:2px 8px; font-family:'Courier New'; font-size:11px; cursor:pointer;">LOGOUT</button>
+                    </form>
                 <div class="lang-switcher">
                     <button class="lang-btn {% if lang == 'ru' %}active{% endif %}" onclick="changeLang('ru')">RU</button>
                     <button class="lang-btn {% if lang == 'en' %}active{% endif %}" onclick="changeLang('en')">EN</button>
@@ -83,6 +77,6 @@
     <!-- КНОПКА "НАВЕРХ" -->
     <button id="btn-top" class="btn-top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
         &uarr; <!-- HTML-символ стрелки вверх -->
-    </button
+    </button>
 </body>
 </html>

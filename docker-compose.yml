@@ -5,7 +5,7 @@ services:
     ports:
       - "8700:8000"
     volumes:
-      - ./app/data:/app/app/data
+      - ./data:/app/data
       - ./templates:/app/templates:ro
       - ./static:/app/static:ro
     restart: unless-stopped

@@ -3,7 +3,10 @@ annotated-types==0.7.0
 anyio==4.13.0
 APScheduler==3.11.2
 certifi==2026.2.25
+cffi==2.0.0
 click==8.3.2
+cryptography==48.0.0
+passlib[bcrypt]==1.7.4
 fastapi==0.135.3
 feedparser==6.0.12
 h11==0.16.0
@@ -13,6 +16,7 @@ httpx==0.28.1
 idna==3.11
 Jinja2==3.1.6
 MarkupSafe==3.0.3
+pycparser==3.0
 pydantic==2.13.1
 pydantic_core==2.46.1
 python-dotenv==1.2.2
@@ -26,4 +30,7 @@ tzlocal==5.3.1
 uvicorn==0.44.0
 uvloop==0.22.1
 watchfiles==1.1.1
-websockets==16.0
+websockets==12.0
+pytest==8.3.5
+pytest-asyncio==0.25.3
+bcrypt==4.0.1

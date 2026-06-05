@@ -4,7 +4,7 @@ __pycache__
 *.pyc
 .git
 .env
-app/data/
+data/
 *.db
 *.db-wal
 *.db-shm

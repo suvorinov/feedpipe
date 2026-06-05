@@ -2,10 +2,13 @@ const injectBtn = document.getElementById('inject-btn');
 const urlDisplay = document.getElementById('url-display');
 const statusDiv = document.getElementById('status');
 
-// ВАЖНО: Замени на IP или домен твоего сервера!
-const FEEDPIPE_SERVER = "http://192.168.0.9:8700"; 
+const DEFAULT_SERVER = "http://192.168.0.9:8700";
 
 // Получаем URL текущей вкладки при открытии попапа
+chrome.storage.sync.get({serverUrl: DEFAULT_SERVER}, function(data) {
+    window.FEEDPIPE_SERVER = data.serverUrl;
+});
+
 chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
     const currentUrl = tabs[0].url;
     urlDisplay.textContent = currentUrl;
@@ -19,7 +22,7 @@ injectBtn.addEventListener('click', async () => {
 
     try {
         // Отправляем запрос к твоему API
-        const response = await fetch(`${FEEDPIPE_SERVER}/api/feeds`, {
+        const response = await fetch(`${window.FEEDPIPE_SERVER}/api/feeds`, {
             method: "POST",
             body: new URLSearchParams({ url: currentUrl }),
         });

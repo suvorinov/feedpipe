@@ -17,7 +17,7 @@ COPY templates/ /app/templates/
 COPY static/ /app/static/
 
 # Создаем директорию для данных
-RUN mkdir -p /app/app/data
+RUN mkdir -p /app/data
 
 # Запускаем приложение
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
