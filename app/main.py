@@ -37,6 +37,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Feedpipe API", lifespan=lifespan)
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 app.include_router(auth.router)
 app.include_router(articles.router)
 app.include_router(feeds.router)

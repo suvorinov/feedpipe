@@ -4,9 +4,9 @@ services:
     container_name: feedpipe
     # Порт на хост НЕ публикуем: сервис виден только внутри Docker-сети,
     # наружу его отдаёт Nginx Proxy Manager.
-    # В NPM: forward host = feedpipe, port = 8000 (через общую сеть proxy).
+    # В NPM: forward host = feedpipe, port = 8000 (через общую сеть nginx_proxy_net).
     networks:
-      - proxy
+      - nginx_proxy_net
     volumes:
       - ./data:/app/data
       - ./templates:/app/templates:ro
@@ -15,11 +15,17 @@ services:
     environment:
       - TZ=Europe/Moscow
       - FEEDPIPE_DATA_DIR=/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 # Общая сеть с Nginx Proxy Manager (внешняя — её создаёт сам NPM,
 # см. npm/docker-compose.yml; при docker compose down не удаляется).
 # Если NPM уже живёт в своей сети — замените имя в поле name: на её название.
 networks:
-  proxy:
+  nginx_proxy_net:
     external: true
-    name: proxy
+    name: nginx_proxy_net
