@@ -5,6 +5,8 @@ __pycache__
 .git
 .env
 data/
+npm/data/
+npm/letsencrypt/
 *.db
 *.db-wal
 *.db-shm
