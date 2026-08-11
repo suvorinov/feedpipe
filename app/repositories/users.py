@@ -1,5 +1,7 @@
 import sqlite3
 
+from app.db import write_lock
+
 
 class UserRepository:
     def __init__(self, conn: sqlite3.Connection):
@@ -12,8 +14,9 @@ class UserRepository:
         return dict(row) if row else None
 
     def create(self, username: str, secret_hash: str) -> None:
-        self.conn.execute(
-            "INSERT INTO users (username, secret_hash) VALUES (?, ?)",
-            (username, secret_hash),
-        )
-        self.conn.commit()
+        with write_lock:
+            self.conn.execute(
+                "INSERT INTO users (username, secret_hash) VALUES (?, ?)",
+                (username, secret_hash),
+            )
+            self.conn.commit()

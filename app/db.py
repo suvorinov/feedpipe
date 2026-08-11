@@ -1,12 +1,27 @@
-import sqlite3
+import datetime
 import os
+import sqlite3
+import threading
 
-# BASE_DIR теперь указывает на /app внутри контейнера
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+
+# Python 3.12+ помечает встроенный адаптер datetime как устаревший.
+# Регистрируем свой: храним даты в ISO-формате (совместимо со строками,
+# которые уже лежат в базе, и с format_date в шаблонах).
+sqlite3.register_adapter(datetime.datetime, lambda dt: dt.isoformat(sep=" "))
+sqlite3.register_adapter(datetime.date, lambda d: d.isoformat())
+
+# Каталог данных можно переопределить через окружение (важно для Docker,
+# где volume монтируется в /app/data). По умолчанию — рядом с кодом.
+DATA_DIR = os.environ.get("FEEDPIPE_DATA_DIR") or os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 DB_PATH = os.path.join(DATA_DIR, "feedpipe.db")
+
+# SQLite допускает только одного писателя. Чтобы не ловить
+# "database is locked" при одновременной записи из парсера и веб-запросов,
+# все write-операции в пределах процесса сериализуем этой блокировкой.
+write_lock = threading.RLock()
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS articles (
@@ -47,9 +62,10 @@ def get_db():
     return conn
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level="DEFERRED")
-    conn.executescript(SCHEMA_SQL)
-    conn.close()
+    with write_lock:
+        conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level="DEFERRED")
+        conn.executescript(SCHEMA_SQL)
+        conn.close()
 
 def migrate_feeds_txt():
     """Одноразовая функция: переносит ссылки из feeds.txt в БД при первом запуске"""
@@ -57,19 +73,20 @@ def migrate_feeds_txt():
 
     if not os.path.exists(txt_path):
         return
-    
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    with open(txt_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#"):
-                try:
-                    cursor.execute("INSERT OR IGNORE INTO feeds (url) VALUES (?)", (line,))
-                except Exception:
-                    pass
-                
-    conn.commit()
-    conn.close()
+
+    with write_lock:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        with open(txt_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    try:
+                        cursor.execute("INSERT OR IGNORE INTO feeds (url) VALUES (?)", (line,))
+                    except Exception:
+                        pass
+
+        conn.commit()
+        conn.close()
     os.rename(txt_path, txt_path + ".migrated")

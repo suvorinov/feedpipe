@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Optional
 
@@ -5,7 +6,7 @@ from fastapi import APIRouter, Cookie, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 import sqlite3
 
-from app.auth import hash_passphrase, verify_passphrase
+from app.auth import COOKIE_NAME, build_auth_cookie_value, hash_passphrase, verify_auth_cookie, verify_passphrase
 from app.db import get_db
 from app.repositories.users import UserRepository
 from app.template_filters import templates
@@ -20,9 +21,9 @@ def login_page(
     error: Optional[str] = None,
     feedpipe_user: Optional[str] = Cookie(None),
 ) -> HTMLResponse:
-    if feedpipe_user:
+    if feedpipe_user and verify_auth_cookie(feedpipe_user):
         return RedirectResponse(url="/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+    return templates.TemplateResponse(request, "login.html", {"error": error})
 
 
 @router.post("/api/auth")
@@ -32,22 +33,22 @@ async def handle_auth(request: Request, db: sqlite3.Connection = Depends(get_db)
     passphrase = form.get("passphrase", "").strip()
 
     if not username or not passphrase:
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Заполните все поля"})
+        return templates.TemplateResponse(request, "login.html", {"error": "Заполните все поля"})
 
     repo = UserRepository(db)
     user = repo.find_by_username(username)
 
     if user:
         if not verify_passphrase(passphrase, user['secret_hash']):
-            return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid key"})
+            return templates.TemplateResponse(request, "login.html", {"error": "Invalid key"})
     else:
         hashed = hash_passphrase(passphrase)
-        repo.create(username, hashed)
+        await asyncio.to_thread(repo.create, username, hashed)
 
     response = RedirectResponse(url="/", status_code=303)
     response.headers["HX-Redirect"] = "/"
     response.set_cookie(
-        key="feedpipe_user", value=username, max_age=30*24*3600,
+        key=COOKIE_NAME, value=build_auth_cookie_value(username), max_age=30*24*3600,
         httponly=True, samesite="lax",
     )
     return response
@@ -57,5 +58,5 @@ async def handle_auth(request: Request, db: sqlite3.Connection = Depends(get_db)
 def logout() -> RedirectResponse:
     response = RedirectResponse(url="/login", status_code=303)
     response.headers["HX-Redirect"] = "/login"
-    response.delete_cookie("feedpipe_user")
+    response.delete_cookie(COOKIE_NAME)
     return response

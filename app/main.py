@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 
@@ -8,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
-from app.sync_state import fire_and_forget_sync
+from app.sync_state import fire_and_forget_sync, set_main_loop
 from app.routers import auth, articles, feeds, sync, web
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -20,6 +21,7 @@ scheduler = BackgroundScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    set_main_loop(asyncio.get_running_loop())
     scheduler.add_job(
         fire_and_forget_sync,
         IntervalTrigger(minutes=30),

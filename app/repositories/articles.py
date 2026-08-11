@@ -1,6 +1,8 @@
 import sqlite3
 import logging
 
+from app.db import write_lock
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,33 +31,35 @@ class ArticleRepository:
         return [dict(row) for row in cursor.fetchall()]
 
     def update_status(self, article_id: int, new_status: str) -> bool:
-        cursor = self.conn.execute(
-            "UPDATE articles SET status = ? WHERE id = ? AND status != ?",
-            (new_status, article_id, new_status),
-        )
-        self.conn.commit()
-        return cursor.rowcount > 0
+        with write_lock:
+            cursor = self.conn.execute(
+                "UPDATE articles SET status = ? WHERE id = ? AND status != ?",
+                (new_status, article_id, new_status),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
 
     def bulk_insert(self, articles: list[dict]) -> int:
         saved_count = 0
-        cursor = self.conn.cursor()
-        for article in articles:
-            try:
-                cursor.execute(
-                    "INSERT OR IGNORE INTO articles "
-                    "(title, link, description, published_at, source_url, status) "
-                    "VALUES (?, ?, ?, ?, ?, 'inbox')",
-                    (
-                        article["title"],
-                        article["link"],
-                        article["description"],
-                        article["published_at"],
-                        article["source_url"],
-                    ),
-                )
-                if cursor.rowcount > 0:
-                    saved_count += 1
-            except sqlite3.Error as e:
-                logger.error(f"Ошибка БД при сохранении {article['link']}: {e}")
-        self.conn.commit()
+        with write_lock:
+            cursor = self.conn.cursor()
+            for article in articles:
+                try:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO articles "
+                        "(title, link, description, published_at, source_url, status) "
+                        "VALUES (?, ?, ?, ?, ?, 'inbox')",
+                        (
+                            article["title"],
+                            article["link"],
+                            article["description"],
+                            article["published_at"],
+                            article["source_url"],
+                        ),
+                    )
+                    if cursor.rowcount > 0:
+                        saved_count += 1
+                except sqlite3.Error as e:
+                    logger.error(f"Ошибка БД при сохранении {article['link']}: {e}")
+            self.conn.commit()
         return saved_count

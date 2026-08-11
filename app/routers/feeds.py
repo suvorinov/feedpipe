@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from urllib.parse import urljoin, urlparse
@@ -42,8 +43,10 @@ async def add_feed(
             headers = {"User-Agent": "Feedpipe/1.0"}
             async with httpx.AsyncClient(headers=headers) as client:
                 resp = await client.get(url, timeout=5.0, follow_redirects=True)
+                resp.raise_for_status()
                 match = re.search(
-                    r'<link[^>]+type="application/(?:rss|atom)\+xml"[^>]+href="([^"]+)"',
+                    r'<link\b(?=[^>]*type=["\']application/(?:rss|atom)\+xml["\'])'
+                    r'(?=[^>]*href=["\']([^"\']+)["\'])[^>]*>',
                     resp.text, re.IGNORECASE,
                 )
                 if match:
@@ -58,6 +61,7 @@ async def add_feed(
     try:
         async with httpx.AsyncClient(headers=headers) as client:
             resp = await client.get(url, timeout=10.0, follow_redirects=True)
+            resp.raise_for_status()
             parsed = feedparser.parse(resp.text)
 
             if parsed.bozo and not parsed.entries:
@@ -85,7 +89,7 @@ async def add_feed(
 
     repo = FeedRepository(db)
     try:
-        repo.add(url, title)
+        await asyncio.to_thread(repo.add, url, title)
     except sqlite3.IntegrityError:
         return JSONResponse(
             status_code=409,
@@ -94,11 +98,8 @@ async def add_feed(
 
     background_tasks.add_task(run_parser_async)
 
-    feeds = repo.get_all()
-    return templates.TemplateResponse(
-        "feeds_list.html",
-        {"request": request, "feeds": feeds}
-    )
+    feeds = await asyncio.to_thread(repo.get_all)
+    return templates.TemplateResponse(request, "feeds_list.html", {"feeds": feeds})
 
 
 @router.delete("/api/feeds/{feed_id}")

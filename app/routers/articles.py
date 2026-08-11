@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,7 +24,10 @@ async def _update_article_status(
         raise HTTPException(400, f"Invalid status. Must be one of: {valid_statuses}")
 
     repo = ArticleRepository(db)
-    if not repo.update_status(article_id, status):
+    # DB-операции — в потоке: пока синхронизация держит write_lock,
+    # запрос ждёт, не блокируя event loop сервера.
+    updated = await asyncio.to_thread(repo.update_status, article_id, status)
+    if not updated:
         raise HTTPException(404, "Article not found or already has this status")
 
     inbox_count = repo.get_inbox_count()

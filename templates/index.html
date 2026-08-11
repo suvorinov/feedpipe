@@ -53,7 +53,7 @@
             {% endfor %}
 
             {# Триггер бесконечной прокрутки #}
-            {% if next_offset < total_count %}
+            {% if next_offset < view_count %}
             <div id="lazy-trigger-0" 
                 hx-get="/?view={{ view }}&offset={{ next_offset }}" 
                 hx-trigger="intersect once" 

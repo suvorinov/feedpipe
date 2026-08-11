@@ -1,22 +1,25 @@
 import asyncio
 import email.utils
 import logging
-import httpx
-import feedparser
 import re
-from datetime import datetime, timezone
+import sqlite3
+from datetime import datetime
+
+import feedparser
+import httpx
+
+from .db import get_db, init_db, migrate_feeds_txt
+from .repositories.articles import ArticleRepository
+from .repositories.feeds import FeedRepository
 
 REQUEST_TIMEOUT = 5.0
 CONCURRENT_LIMIT = 10
 
 logger = logging.getLogger(__name__)
 
-from .db import get_db, init_db, migrate_feeds_txt
-from .repositories.articles import ArticleRepository
-from .repositories.feeds import FeedRepository
-
 
 async def save_articles(articles: list[dict], retries: int = 3) -> int:
+    """Сохраняет статьи; повторяет попытку при блокировке БД (SQLite: 'database is locked')."""
     if not articles:
         return 0
 
@@ -25,16 +28,16 @@ async def save_articles(articles: list[dict], retries: int = 3) -> int:
         try:
             conn = get_db()
             repo = ArticleRepository(conn)
-            saved_count = repo.bulk_insert(articles)
-            conn.close()
+            # Вставка идёт в потоке: не блокируем event loop, пока ждём write_lock
+            saved_count = await asyncio.to_thread(repo.bulk_insert, articles)
             return saved_count
-        except Exception as e:
+        except sqlite3.OperationalError as e:
             if "locked" in str(e).lower() and attempt < retries - 1:
                 await asyncio.sleep(0.5 * (attempt + 1))
-                continue
-            raise
+            else:
+                raise
         finally:
-            if conn:
+            if conn is not None:
                 conn.close()
 
     return 0

@@ -1,4 +1,4 @@
-.PHONY: help build up up-attach down logs restart parse shell clean
+.PHONY: help build up up-attach down logs restart parse dev shell clean
 
 # ========================
 # Справка
@@ -39,6 +39,9 @@ parse: ## Запустить парсер (сбор фидов)
 # ========================
 # Разработка
 # ========================
+
+dev: ## Запустить сервис в режиме разработки (авто-перезагрузка, порт 8700)
+	.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8700
 
 shell: ## Открыть shell в контейнере
 	docker compose exec feedpipe /bin/bash

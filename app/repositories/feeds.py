@@ -1,6 +1,8 @@
 import sqlite3
 import logging
 
+from app.db import write_lock
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,11 +21,13 @@ class FeedRepository:
         return [row["url"] for row in cursor.fetchall()]
 
     def add(self, url: str, title: str) -> None:
-        self.conn.execute(
-            "INSERT INTO feeds (url, title) VALUES (?, ?)", (url, title)
-        )
-        self.conn.commit()
+        with write_lock:
+            self.conn.execute(
+                "INSERT INTO feeds (url, title) VALUES (?, ?)", (url, title)
+            )
+            self.conn.commit()
 
     def delete(self, feed_id: int) -> None:
-        self.conn.execute("DELETE FROM feeds WHERE id = ?", (feed_id,))
-        self.conn.commit()
+        with write_lock:
+            self.conn.execute("DELETE FROM feeds WHERE id = ?", (feed_id,))
+            self.conn.commit()

@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 
 def auth_headers(client: TestClient) -> None:
-    client.cookies.set("feedpipe_user", "testuser")
+    client.post("/api/auth", data={"username": "testuser", "passphrase": "testkey"})
 
 
 class TestLoginPage:
@@ -33,7 +33,7 @@ class TestAuth:
         assert response.status_code == 303
         assert response.headers.get("hx-redirect") == "/"
         assert "feedpipe_user" in response.cookies
-        assert response.cookies["feedpipe_user"] == "newuser"
+        assert response.cookies["feedpipe_user"].startswith("newuser.")
 
     def test_auth_sets_httponly_cookie(self, client: TestClient):
         response = client.post("/api/auth", data={
@@ -79,6 +79,28 @@ class TestAuth:
         }, follow_redirects=False)
         assert response.status_code == 303
         assert response.headers.get("hx-redirect") == "/"
+
+
+class TestAuthSecurity:
+    def test_forged_cookie_rejected(self, client: TestClient):
+        client.cookies.set("feedpipe_user", "admin")
+        response = client.get("/api/status")
+        assert response.status_code == 401
+
+    def test_malformed_cookie_rejected(self, client: TestClient):
+        client.cookies.set("feedpipe_user", "admin.no-valid-signature")
+        response = client.get("/api/status")
+        assert response.status_code == 401
+
+    def test_forged_cookie_shows_login_page(self, client: TestClient):
+        client.cookies.set("feedpipe_user", "admin")
+        response = client.get("/")
+        assert "AUTH" in response.text
+
+    def test_valid_cookie_accepted(self, client: TestClient):
+        auth_headers(client)
+        response = client.get("/api/status")
+        assert response.status_code == 200
 
 
 class TestLogout:
@@ -253,7 +275,8 @@ class TestAuthFlow:
         }, follow_redirects=False)
         assert response.status_code == 303
         cookie = response.cookies.get("feedpipe_user")
-        assert cookie == "flowuser"
+        assert cookie is not None
+        assert cookie.startswith("flowuser.")
 
         # 3. Now logged in -> see main page
         client.cookies.set("feedpipe_user", cookie)
@@ -277,9 +300,8 @@ class TestAuthFlow:
         assert response.status_code == 401
 
 
-@pytest.mark.skip(reason="Requires mocking external HTTP calls and feedparser")
 class TestAddFeed:
-    def test_add_feed(self, client: TestClient):
+    def test_add_feed(self, client: TestClient, fake_http):
         auth_headers(client)
         response = client.post("/api/feeds", data={"url": "https://example.com/rss"})
         assert response.status_code == 200

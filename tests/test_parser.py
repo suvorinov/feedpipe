@@ -1,6 +1,12 @@
+import threading
+import time
 from datetime import datetime
 
-from app.parser import clean_html, parse_date, normalize_entry
+import pytest
+
+from app.db import write_lock
+from app.parser import clean_html, parse_date, normalize_entry, save_articles
+from app.repositories.articles import ArticleRepository
 
 
 class TestCleanHtml:
@@ -117,3 +123,67 @@ class TestNormalizeEntry:
         }
         result = normalize_entry(entry, "https://example.com/rss")
         assert result["published_at"].year == 2024
+
+
+class TestSaveArticles:
+    @pytest.mark.asyncio
+    async def test_inserts_and_dedups(self, test_db):
+        articles = [
+            {
+                "title": "Article A",
+                "link": "https://example.com/a",
+                "description": "Desc A",
+                "published_at": "2024-01-01 00:00:00",
+                "source_url": "https://example.com/rss",
+            },
+            {
+                "title": "Article B",
+                "link": "https://example.com/b",
+                "description": "Desc B",
+                "published_at": "2024-01-01 00:00:00",
+                "source_url": "https://example.com/rss",
+            },
+        ]
+        assert await save_articles(articles) == 2
+        assert await save_articles(articles) == 0
+
+    @pytest.mark.asyncio
+    async def test_empty_list(self, test_db):
+        assert await save_articles([]) == 0
+
+
+class TestWriteSerialization:
+    def test_update_status_waits_for_write_lock(self, test_db):
+        """update_status не падает с 'database is locked', а ждёт завершения записи парсера."""
+        lock_held = threading.Event()
+        release = threading.Event()
+
+        def hold_lock():
+            with write_lock:
+                lock_held.set()
+                release.wait(timeout=5)
+
+        holder = threading.Thread(target=hold_lock)
+        holder.start()
+        assert lock_held.wait(timeout=5)
+
+        cursor = test_db.execute(
+            "INSERT INTO articles (title, link, status) VALUES ('B', 'http://b', 'inbox')"
+        )
+        test_db.commit()
+        article_id = cursor.lastrowid
+
+        result = {}
+
+        def do_update():
+            result["ok"] = ArticleRepository(test_db).update_status(article_id, "later")
+
+        updater = threading.Thread(target=do_update)
+        updater.start()
+        time.sleep(0.2)
+        assert updater.is_alive(), "update должен ждать write_lock, а не падать"
+
+        release.set()
+        holder.join(timeout=5)
+        updater.join(timeout=5)
+        assert result["ok"] is True

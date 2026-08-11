@@ -386,7 +386,9 @@ h1 span { color: var(--accent); }
     opacity: 0.5;
 }
 
-.empty-state { text-align: center; padding: 4rem 0; font-family: var(--font-mono); color: var(--text-muted); }
+/* Верхний отступ совпадает с .article-card (1.5rem), чтобы лента не "прыгала",
+   когда между пустым состоянием и первыми записями появляются статьи. */
+.empty-state { text-align: center; padding: 1.5rem 0 4rem; font-family: var(--font-mono); color: var(--text-muted); }
 .empty-state code { display: block; font-size: 1.2rem; color: var(--accent); margin-bottom: 1rem; }
 
 .auto-badge {

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Cookie, Depends, Request, WebSocket, WebSocketDis
 from fastapi.responses import FileResponse, HTMLResponse
 import sqlite3
 
+from app.auth import COOKIE_NAME, verify_auth_cookie
 from app.db import get_db
 from app.repositories.articles import ArticleRepository
 from app.repositories.feeds import FeedRepository
@@ -49,9 +50,8 @@ def read_root(
     feedpipe_lang: Optional[str] = Cookie(None),
     view: str = "inbox",
     offset: int = 0,
-    feedpipe_user: Optional[str] = Cookie(None),
 ) -> HTMLResponse:
-    user = feedpipe_user
+    user = verify_auth_cookie(request.cookies.get(COOKIE_NAME))
     is_auth = bool(user)
     current_lang = lang or feedpipe_lang or "ru"
 
@@ -66,13 +66,12 @@ def read_root(
     feeds = feed_repo.get_all()
 
     if not is_auth:
-        response = templates.TemplateResponse("login.html", {"request": request, "error": None})
+        response = templates.TemplateResponse(request, "login.html", {"error": None})
         if lang:
             response.set_cookie(key="feedpipe_lang", value=lang, max_age=31536000)
         return response
 
     context = {
-        "request": request,
         "articles": articles,
         "total_count": inbox_count,
         "later_count": later_count,
@@ -87,9 +86,9 @@ def read_root(
     is_htmx_request = request.headers.get("HX-Request") == "true"
 
     if is_htmx_request:
-        response = templates.TemplateResponse("articles_list.html", context)
+        response = templates.TemplateResponse(request, "articles_list.html", context)
     else:
-        response = templates.TemplateResponse("index.html", context)
+        response = templates.TemplateResponse(request, "index.html", context)
 
     if lang:
         response.set_cookie(key="feedpipe_lang", value=lang, max_age=31536000)
