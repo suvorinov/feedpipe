@@ -1,7 +1,7 @@
 import logging
 import sqlite3
 
-from app.db import get_db, write_lock
+from app.db import db_conn_context, write_lock
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +107,5 @@ class ArticleRepository:
 
 def cleanup_archived_articles(days: int = ARCHIVE_RETENTION_DAYS) -> int:
     """Джоба планировщика: открывает свою консоль, чистит и закрывает."""
-    conn = get_db()
-    try:
+    with db_conn_context() as conn:
         return ArticleRepository(conn).delete_archived_older_than(days)
-    finally:
-        conn.close()

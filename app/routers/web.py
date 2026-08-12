@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Cookie, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 
-from app.auth import COOKIE_NAME, SESSION_HEADER, verify_auth_cookie
+from app.auth import COOKIE_NAME, SESSION_HEADER, verify_session
 from app.db import get_db
 from app.repositories.articles import ArticleRepository
 from app.repositories.feeds import FeedRepository
@@ -30,9 +30,7 @@ async def websocket_endpoint(websocket: WebSocket):
     # WebSocket отдаёт статус синка и счётчики — это не должно быть открыто
     # анониму. Cookie прилетает в handshake сама (same-origin), для
     # расширения принимаем сессионный заголовок.
-    user = verify_auth_cookie(websocket.cookies.get(COOKIE_NAME))
-    if not user:
-        user = verify_auth_cookie(websocket.headers.get(SESSION_HEADER))
+    user = verify_session(websocket.cookies.get(COOKIE_NAME), websocket.headers.get(SESSION_HEADER))
     if not user:
         await websocket.close(code=1008)
         return
@@ -62,9 +60,7 @@ def read_root(
     view: str = "inbox",
     before: int | None = None,
 ) -> HTMLResponse:
-    user = verify_auth_cookie(request.cookies.get(COOKIE_NAME))
-    if not user:
-        user = verify_auth_cookie(request.headers.get(SESSION_HEADER))
+    user = verify_session(request.cookies.get(COOKIE_NAME), request.headers.get(SESSION_HEADER))
     is_auth = bool(user)
     current_lang = lang or feedpipe_lang or "ru"
 

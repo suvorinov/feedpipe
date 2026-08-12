@@ -51,6 +51,10 @@ docker-compose up -d
 ## Переменные окружения
 
 - `TZ` — часовой пояс (по умолчанию Europe/Moscow)
+- `FEEDPIPE_DATA_DIR` — каталог для данных (БД и `secret.key`), по умолчанию `app/data`
+- `FEEDPIPE_SECRET` — секрет подписи сессий (иначе генерируется и хранится в `DATA_DIR/secret.key`)
+- `FEEDPIPE_ALLOWED_ORIGINS` — дополнительные доверенные origins для CSRF-проверки (через запятую)
+- `FEEDPIPE_SECURE_COOKIE` — `1`, если приложение отдаётся по HTTPS: сессионный cookie получит флаг `Secure`
 
 ## API
 
@@ -87,11 +91,20 @@ docker-compose up -d
 
 ```
 app/
-  main.py      # FastAPI приложение
-  db.py        # Работа с SQLite
-  parser.py    # Парсинг RSS/Atom
-templates/     # HTML шаблоны
-static/        # CSS, JS
+  main.py              # FastAPI-приложение: lifespan, планировщик, CSRF-guard, /health
+  config.py            # Таймауты и лимиты сетевой работы
+  db.py                # SQLite: схема, WAL, write_lock, get_db-зависимость
+  auth.py              # HMAC-сессии, bcrypt, единая проверка авторизации
+  parser.py            # Сбор и парсинг RSS/Atom (feedparser + httpx)
+  sync_state.py        # Оркестрация синхронизации, статусы, рассылка по WebSocket
+  ws_manager.py        # Управление WebSocket-соединениями
+  template_filters.py  # Jinja2-фильтры (format_date)
+  routers/             # HTTP-эндпоинты: web, articles, feeds, auth, sync
+  repositories/        # Доступ к БД: articles, feeds, users
+templates/             # HTML-шаблоны (Jinja2 + htmx)
+static/                # CSS, JS, иконки
+extension/             # Chrome-расширение «Feedpipe Injector»
+tests/                 # pytest: юнит, интеграционные, безопасность
 ```
 
 ## Качество кода

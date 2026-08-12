@@ -8,7 +8,14 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Cookie, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.auth import COOKIE_NAME, build_auth_cookie_value, hash_passphrase, verify_auth_cookie, verify_passphrase
+from app.auth import (
+    COOKIE_NAME,
+    SECURE_COOKIE,
+    build_auth_cookie_value,
+    hash_passphrase,
+    verify_auth_cookie,
+    verify_passphrase,
+)
 from app.db import get_db
 from app.repositories.users import UserRepository
 from app.template_filters import templates
@@ -87,6 +94,7 @@ async def handle_auth(request: Request, db: sqlite3.Connection = Depends(get_db)
         max_age=30 * 24 * 3600,
         httponly=True,
         samesite="lax",
+        secure=SECURE_COOKIE,
     )
     return response
 

@@ -1,5 +1,5 @@
 <h3 class="feeds-toggle" onclick="document.querySelector('.feeds-wrapper').classList.toggle('collapsed')">
-    // {% if lang == 'en' %}Active Feeds{% else %}Активные фиды{% endif %} ({{ feeds|length }})
+    // {% if lang == 'en' %}Active Feeds{% else %}Активные фиды{% endif %} (<span id="feeds-count">{{ feeds|length }}</span>)
 </h3>
 <div class="feeds-wrapper collapsed">
     <input type="text" id="feed-search" class="feed-search" placeholder="{% if lang == 'en' %}Filter...{% else %}Фильтр...{% endif %}" oninput="filterFeeds()">

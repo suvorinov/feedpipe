@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.auth import SESSION_HEADER
-from app.db import get_db, init_db
+from app.db import db_conn_context, init_db
 from app.repositories.articles import cleanup_archived_articles
 from app.routers import articles, auth, feeds, sync, web
 from app.sync_state import fire_and_forget_sync, set_main_loop
@@ -82,9 +82,8 @@ async def csrf_guard(request: Request, call_next):
 @app.get("/health")
 async def health():
     try:
-        conn = get_db()
-        conn.execute("SELECT 1").fetchone()
-        conn.close()
+        with db_conn_context() as conn:
+            conn.execute("SELECT 1").fetchone()
         return {"status": "ok", "db": "ok"}
     except Exception:
         return JSONResponse(status_code=503, content={"status": "degraded", "db": "error"})

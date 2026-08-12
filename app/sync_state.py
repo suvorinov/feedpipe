@@ -3,7 +3,7 @@ import logging
 import threading
 from datetime import datetime
 
-from app.db import get_db
+from app.db import db_conn_context
 from app.parser import main as parser_main
 from app.repositories.articles import ArticleRepository
 from app.ws_manager import manager
@@ -21,6 +21,11 @@ SYNC_STATUS = {
 # правильного loop, а не создавала чужой.
 _main_loop: asyncio.AbstractEventLoop | None = None
 
+# Ссылка на активную задачу/фьючу синхронизации. Держим намеренно: asyncio
+# хранит задачи в WeakSet, и без сильной ссылки pending-задача может быть
+# собрана сборщиком мусора посреди синхронизации.
+_sync_task: asyncio.Future | None = None
+
 # Защищает проверку/установку флага is_running от гонки между потоками.
 _sync_lock = threading.Lock()
 
@@ -28,6 +33,12 @@ _sync_lock = threading.Lock()
 def set_main_loop(loop: asyncio.AbstractEventLoop) -> None:
     global _main_loop
     _main_loop = loop
+
+
+def _forget_sync_task(_: asyncio.Future) -> None:
+    """Освобождает ссылку на завершённую задачу, чтобы следующий синк её заменил."""
+    global _sync_task
+    _sync_task = None
 
 
 async def run_parser_async() -> None:
@@ -41,11 +52,8 @@ async def run_parser_async() -> None:
     try:
         await parser_main()
 
-        conn = get_db()
-        try:
+        with db_conn_context() as conn:
             new_count = ArticleRepository(conn).get_inbox_count()
-        finally:
-            conn.close()
 
         SYNC_STATUS["last_sync"] = datetime.now().isoformat()
         SYNC_STATUS["last_count"] = new_count
@@ -70,20 +78,27 @@ async def run_parser_async() -> None:
 def fire_and_forget_sync() -> None:
     """Запускает синхронизацию в фоне, не дожидаясь результата.
 
+    Во всех ветках сохраняем ссылку на задачу (см. _sync_task), чтобы
+    планировщик не собрал её GC посреди работы.
+
     - Из основного loop (веб-запрос, BackgroundTasks) — через create_task.
     - Из чужого потока (APScheduler) — через run_coroutine_threadsafe в главный loop.
     - Вне приложения (python -m app.parser) — через asyncio.run.
     """
+    global _sync_task
     if _main_loop is not None:
-        asyncio.run_coroutine_threadsafe(run_parser_async(), _main_loop)
-        return
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop is not None:
-        loop.create_task(run_parser_async())
+        task = asyncio.run_coroutine_threadsafe(run_parser_async(), _main_loop)
     else:
-        asyncio.run(run_parser_async())
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            task = loop.create_task(run_parser_async())
+        else:
+            asyncio.run(run_parser_async())
+            return
+
+    _sync_task = task
+    task.add_done_callback(_forget_sync_task)

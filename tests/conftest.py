@@ -111,9 +111,8 @@ def test_db(tmp_path: Path) -> Generator[sqlite3.Connection, None, None]:
     import app.db
 
     app.db.init_db()
-    conn = app.db.get_db()
-    yield conn
-    conn.close()
+    with app.db.db_conn_context() as conn:
+        yield conn
 
 
 @pytest.fixture

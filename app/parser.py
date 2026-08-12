@@ -10,7 +10,7 @@ import feedparser
 import httpx
 
 from .config import CONCURRENT_FEEDS, FEED_FETCH_TIMEOUT
-from .db import get_db, init_db, migrate_feeds_txt
+from .db import db_conn_context, init_db, migrate_feeds_txt
 from .repositories.articles import ArticleRepository
 from .repositories.feeds import FeedRepository
 
@@ -26,21 +26,17 @@ async def save_articles(articles: list[dict], retries: int = 3) -> int:
         return 0
 
     for attempt in range(retries):
-        conn = None
         try:
-            conn = get_db()
-            repo = ArticleRepository(conn)
-            # Вставка идёт в потоке: не блокируем event loop, пока ждём write_lock
-            saved_count = await asyncio.to_thread(repo.bulk_insert, articles)
+            with db_conn_context() as conn:
+                repo = ArticleRepository(conn)
+                # Вставка идёт в потоке: не блокируем event loop, пока ждём write_lock
+                saved_count = await asyncio.to_thread(repo.bulk_insert, articles)
             return saved_count
         except sqlite3.OperationalError as e:
             if "locked" in str(e).lower() and attempt < retries - 1:
                 await asyncio.sleep(0.5 * (attempt + 1))
             else:
                 raise
-        finally:
-            if conn is not None:
-                conn.close()
 
     return 0
 
@@ -130,10 +126,9 @@ async def main():
     init_db()
     migrate_feeds_txt()
 
-    conn = get_db()
-    feed_repo = FeedRepository(conn)
-    urls = feed_repo.get_all_urls()
-    conn.close()
+    with db_conn_context() as conn:
+        feed_repo = FeedRepository(conn)
+        urls = feed_repo.get_all_urls()
 
     if not urls:
         logger.info("В базе нет подписок. Добавьте их через веб-интерфейс.")
@@ -153,10 +148,9 @@ async def main():
     logger.info("Сохранение в базу данных...")
     new_saved = await save_articles(all_articles)
 
-    conn = get_db()
-    repo = ArticleRepository(conn)
-    inbox_count = repo.get_inbox_count()
-    conn.close()
+    with db_conn_context() as conn:
+        repo = ArticleRepository(conn)
+        inbox_count = repo.get_inbox_count()
 
     logger.info(f"Всего найдено статей: {len(all_articles)}")
     logger.info(f"Новых добавлено: {new_saved}")

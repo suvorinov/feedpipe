@@ -14,6 +14,12 @@ COOKIE_NAME = "feedpipe_user"
 SESSION_HEADER = "X-Feedpipe-Session"
 SECRET_FILE = os.path.join(DATA_DIR, "secret.key")
 
+# Помечать сессионный cookie флагом Secure. Включайте (FEEDPIPE_SECURE_COOKIE=1),
+# если приложение отдаётся только по HTTPS (в т.ч. за TLS-терминатором вроде
+# Nginx Proxy Manager). Локально по HTTP флаг выключен: иначе браузер
+# вообще не сохранит cookie.
+SECURE_COOKIE = os.environ.get("FEEDPIPE_SECURE_COOKIE", "0").lower() in ("1", "true", "yes", "on")
+
 
 def _load_secret() -> bytes:
     """Возвращает секрет для подписи cookie.
@@ -78,10 +84,21 @@ def verify_passphrase(passphrase: str, hashed: str) -> bool:
         return False
 
 
-def get_current_user(request: Request) -> str:
-    user = verify_auth_cookie(request.cookies.get(COOKIE_NAME))
+def verify_session(cookie_value: str | None, header_value: str | None) -> str | None:
+    """Проверяет сессию из cookie или заголовка расширения.
+
+    Единая точка проверки авторизации: браузер присылает cookie, расширение —
+    тот же механизм заголовком X-Feedpipe-Session (cookie cross-origin не уходит).
+    Возвращает username при валидной подписи, иначе None.
+    """
+    user = verify_auth_cookie(cookie_value)
     if not user:
-        user = verify_auth_cookie(request.headers.get(SESSION_HEADER))
+        user = verify_auth_cookie(header_value)
+    return user
+
+
+def get_current_user(request: Request) -> str:
+    user = verify_session(request.cookies.get(COOKIE_NAME), request.headers.get(SESSION_HEADER))
     if not user:
         if request.headers.get("HX-Request") == "true":
             raise HTTPException(

@@ -2,6 +2,8 @@ import datetime
 import os
 import sqlite3
 import threading
+from collections.abc import Generator
+from contextlib import contextmanager
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -56,12 +58,35 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
-def get_db():
+def _open_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False, isolation_level="DEFERRED")
     conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     _ensure_schema(conn)
     return conn
+
+
+def get_db():
+    """Открывает соединение с БД (генератор, для FastAPI `Depends(get_db)`).
+
+    FastAPI сам завершает генератор и закрывает соединение в finally.
+    Вне FastAPI (парсер, джобы, скрипты) используйте db_conn_context().
+    """
+    conn = _open_conn()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def db_conn_context() -> Generator[sqlite3.Connection, None, None]:
+    """То же, что get_db(), но по протоколу `with` для кода вне FastAPI."""
+    conn = _open_conn()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def init_db():
@@ -79,18 +104,17 @@ def migrate_feeds_txt():
         return
 
     with write_lock:
-        conn = get_db()
-        cursor = conn.cursor()
+        with db_conn_context() as conn:
+            cursor = conn.cursor()
 
-        with open(txt_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    try:
-                        cursor.execute("INSERT OR IGNORE INTO feeds (url) VALUES (?)", (line,))
-                    except Exception:
-                        pass
+            with open(txt_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        try:
+                            cursor.execute("INSERT OR IGNORE INTO feeds (url) VALUES (?)", (line,))
+                        except Exception:
+                            pass
 
-        conn.commit()
-        conn.close()
+            conn.commit()
     os.rename(txt_path, txt_path + ".migrated")

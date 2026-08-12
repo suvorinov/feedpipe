@@ -4,6 +4,8 @@ HTTP наружу подменяется фикстурой fake_http (см. con
 никакие реальные сайты не запрашиваются.
 """
 
+import re
+
 from fastapi.testclient import TestClient
 
 
@@ -105,3 +107,38 @@ class TestDeleteArticle:
         inbox = client.get("/", headers={"HX-Request": "true"})
         assert "Article One" not in inbox.text
         assert "Article Two" in inbox.text
+
+
+class TestFeedCounter:
+    """Счётчик фидов должен обновляться без перезагрузки страницы (htmx OOB)."""
+
+    @staticmethod
+    def _count(response) -> int:
+        return int(re.search(r'feeds-count">(\d+)<', response.text).group(1))
+
+    def test_counter_rendered_on_page(self, client: TestClient):
+        _login(client)
+        assert 'id="feeds-count"' in client.get("/").text
+
+    def test_counter_updates_on_add(self, client: TestClient, fake_http):
+        _login(client)
+        response = client.post("/api/feeds", data={"url": "https://site.example/feed"})
+        assert response.status_code == 200
+        assert 'hx-swap-oob="outerHTML:#feeds-count"' in response.text
+        assert self._count(response) == 1
+
+    def test_counter_updates_on_delete(self, client: TestClient, fake_http):
+        _login(client)
+        client.post("/api/feeds", data={"url": "https://example.com/rss"})
+        response = client.delete("/api/feeds/1")
+        assert response.status_code == 200
+        assert "hx-swap-oob" in response.text
+        assert self._count(response) == 0
+
+    def test_counter_decrements_on_delete_with_two_feeds(self, client: TestClient, fake_http):
+        _login(client)
+        client.post("/api/feeds", data={"url": "https://example.com/rss"})
+        client.post("/api/feeds", data={"url": "https://site.example/feed"})
+        response = client.delete("/api/feeds/1")
+        assert response.status_code == 200
+        assert self._count(response) == 1

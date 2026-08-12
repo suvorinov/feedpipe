@@ -1,0 +1,2 @@
+{# Фрагмент для htmx out-of-band подмены счётчика фидов после добавления/удаления #}
+<span id="feeds-count" hx-swap-oob="outerHTML:#feeds-count">{{ feeds|length }}</span>

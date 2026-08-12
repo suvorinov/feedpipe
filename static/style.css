@@ -33,6 +33,13 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Всегда резервируем место под вертикальный скроллбар: иначе при переходе
+   между вкладками (полная лента ↔ пустое состояние) скроллбар то появляется,
+   то исчезает, и центрированный .container "прыгает" вправо/влево. */
+html {
+    scrollbar-gutter: stable;
+}
+
 body {
     background-color: var(--bg-base);
     color: var(--text-primary);

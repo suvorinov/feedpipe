@@ -19,9 +19,7 @@ MarkupSafe==3.0.3
 pycparser==3.0
 pydantic==2.13.1
 pydantic_core==2.46.1
-python-dotenv==1.2.2
 python-multipart==0.0.26
-PyYAML==6.0.3
 sgmllib3k==1.0.0
 starlette==0.52.1
 typing-inspection==0.4.2

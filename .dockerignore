@@ -1,0 +1,16 @@
+# Не тащим в build context то, что не копируется в образ:
+# меньше передаётся демону Docker и нет риска, что секреты из ./data
+# (включая secret.key) случайно попадут в образ.
+.venv/
+.git/
+.github/
+tests/
+data/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+.env

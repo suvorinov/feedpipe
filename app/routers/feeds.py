@@ -9,7 +9,7 @@ from urllib.parse import urljoin, urlparse
 import feedparser
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
 from app.auth import get_current_user
 from app.config import FEED_DISCOVERY_TIMEOUT, FEED_FETCH_TIMEOUT
@@ -157,6 +157,15 @@ async def add_feed(
 
 
 @router.delete("/api/feeds/{feed_id}")
-def delete_feed(feed_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
-    FeedRepository(db).delete(feed_id)
-    return HTMLResponse(content="", status_code=200)
+def delete_feed(
+    request: Request,
+    feed_id: int,
+    user: str = Depends(get_current_user),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    repo = FeedRepository(db)
+    repo.delete(feed_id)
+    # htmx: основной swap убирает <li> (hx-target="closest li"), а этот фрагмент
+    # out-of-band обновляет счётчик фидов в сайдбаре.
+    feeds = repo.get_all()
+    return templates.TemplateResponse(request, "feeds_count_oob.html", {"feeds": feeds})
