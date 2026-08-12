@@ -1,31 +1,31 @@
 <div class="card-actions">
     {% if view != 'later' %}
-    <button class="btn-action btn-hold"
+    <button class="btn-action btn-hold card-action"
+            data-action="hold"
+            data-card-id="{{ article.id }}"
             hx-patch="/api/articles/{{ article.id }}/status?status=later"
             hx-target="#article-{{ article.id }}"
-            hx-swap="afterend"
-            data-card-id="{{ article.id }}"
-            hx-on::after-request="if(event.detail.successful){ const card=document.getElementById('article-'+this.dataset.cardId); if(card){card.classList.add('just-held'); setTimeout(()=>card.remove(),300);} decrementCounter(); }">
+            hx-swap="afterend">
         <span class="bracket">[+]</span>
         {% if lang == 'en' %}hold{% else %}отложить{% endif %}
     </button>
     {% else %}
-    <button class="btn-action btn-restore"
+    <button class="btn-action btn-restore card-action"
+            data-action="restore"
+            data-card-id="{{ article.id }}"
             hx-patch="/api/articles/{{ article.id }}/status?status=inbox"
             hx-target="#article-{{ article.id }}"
-            hx-swap="afterend"
-            data-card-id="{{ article.id }}"
-            hx-on::after-request="if(event.detail.successful){ const card=document.getElementById('article-'+this.dataset.cardId); if(card){card.classList.add('just-held'); setTimeout(()=>card.remove(),300);} incrementCounter(); }">
+            hx-swap="afterend">
         <span class="bracket">&lt;-</span>
         {% if lang == 'en' %}restore{% else %}вернуть{% endif %}
     </button>
     {% endif %}
-    <button class="btn-action btn-purge"
+    <button class="btn-action btn-purge card-action"
+            data-action="purge"
+            data-card-id="{{ article.id }}"
             hx-patch="/api/articles/{{ article.id }}/status?status=archived"
             hx-target="#article-{{ article.id }}"
-            hx-swap="afterend"
-            data-card-id="{{ article.id }}"
-            hx-on::after-request="if(event.detail.successful){ const card=document.getElementById('article-'+this.dataset.cardId); if(card){card.classList.add('removing'); setTimeout(()=>card.remove(),300);} decrementCounter(); }">
+            hx-swap="afterend">
         <span class="bracket">[x]</span>
         {% if lang == 'en' %}purge{% else %}очистить{% endif %}
     </button>

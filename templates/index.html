@@ -52,15 +52,8 @@
                 {% include "empty_state.html" %}
             {% endfor %}
 
-            {# Триггер бесконечной прокрутки: следующая страница продолжается после последней карточки #}
-            {% if has_more %}
-            <div id="lazy-trigger-0" 
-                hx-get="/?view={{ view }}&before={{ next_cursor }}" 
-                hx-trigger="intersect once" 
-                hx-swap="beforeend"
-                hx-target="#feed-list">
-            </div>
-            {% endif %}
+            {# Бесконечная прокрутка: триггер сам себя заменяет ответом со следующей страницей #}
+            {% include "load_more_trigger.html" %}
         </main>
 
         <aside class="sidebar">

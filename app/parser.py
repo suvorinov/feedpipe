@@ -1,5 +1,6 @@
 import asyncio
 import email.utils
+import html
 import logging
 import re
 import sqlite3
@@ -8,12 +9,13 @@ from datetime import datetime
 import feedparser
 import httpx
 
+from .config import CONCURRENT_FEEDS, FEED_FETCH_TIMEOUT
 from .db import get_db, init_db, migrate_feeds_txt
 from .repositories.articles import ArticleRepository
 from .repositories.feeds import FeedRepository
 
-REQUEST_TIMEOUT = 5.0
-CONCURRENT_LIMIT = 10
+REQUEST_TIMEOUT = FEED_FETCH_TIMEOUT
+CONCURRENT_LIMIT = CONCURRENT_FEEDS
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +46,6 @@ async def save_articles(articles: list[dict], retries: int = 3) -> int:
 
 
 def clean_html(raw_text: str) -> str:
-    import html
-
     clean = re.sub(r"<[^>]+>", "", raw_text)
     clean = html.unescape(clean)
     clean = re.sub(r"submitted by\s+/u/\S+\s*\[link\]\s*\[comments\]?", "", clean, flags=re.IGNORECASE)

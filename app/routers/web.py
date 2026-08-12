@@ -27,6 +27,16 @@ async def manifest() -> FileResponse:
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # WebSocket отдаёт статус синка и счётчики — это не должно быть открыто
+    # анониму. Cookie прилетает в handshake сама (same-origin), для
+    # расширения принимаем сессионный заголовок.
+    user = verify_auth_cookie(websocket.cookies.get(COOKIE_NAME))
+    if not user:
+        user = verify_auth_cookie(websocket.headers.get(SESSION_HEADER))
+    if not user:
+        await websocket.close(code=1008)
+        return
+
     await manager.connect(websocket)
     try:
         await websocket.send_json(

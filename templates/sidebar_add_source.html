@@ -7,17 +7,3 @@
     </button>
     <div id="feed-error" class="feed-error"></div>
 </form>
-<script>
-document.body.addEventListener('htmx:responseError', function(evt) {
-    const xhr = evt.detail.xhr;
-    if (xhr.status === 400 || xhr.status === 409) {
-        try {
-            const data = JSON.parse(xhr.responseText);
-            showFeedError(data.error || 'Неизвестная ошибка!');
-        } catch(e) {
-            showFeedError(xhr.responseText || 'Неизвестная ошибка!');
-        }
-        evt.preventDefault();
-    }
-});
-</script>

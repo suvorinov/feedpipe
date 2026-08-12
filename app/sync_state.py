@@ -61,7 +61,10 @@ async def run_parser_async() -> None:
         logger.error(f"Parser error: {e}")
         await manager.broadcast({"type": "sync_error", "error": str(e)})
     finally:
-        SYNC_STATUS["is_running"] = False
+        # Сброс тоже под lock: иначе первая завершившаяся задача могла бы
+        # стереть is_running=True, только что поставленный второй задачей.
+        with _sync_lock:
+            SYNC_STATUS["is_running"] = False
 
 
 def fire_and_forget_sync() -> None:

@@ -1,4 +1,8 @@
+import socket
+
+import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 
 def auth_headers(client: TestClient) -> None:
@@ -385,3 +389,52 @@ class TestAddFeed:
         auth_headers(client)
         response = client.post("/api/feeds", data={"url": "not-a-url"})
         assert response.status_code == 400
+
+
+class TestSsrf:
+    """Сервер не должен ходить на внутренние адреса (SSRF-защита)."""
+
+    def test_loopback_ip_rejected(self, client: TestClient, fake_http):
+        auth_headers(client)
+        response = client.post("/api/feeds", data={"url": "http://127.0.0.1:8000/health"})
+        assert response.status_code == 400
+
+    def test_private_ip_rejected(self, client: TestClient, fake_http):
+        auth_headers(client)
+        response = client.post("/api/feeds", data={"url": "http://192.168.1.1/rss"})
+        assert response.status_code == 400
+
+    def test_linklocal_ip_rejected(self, client: TestClient, fake_http):
+        auth_headers(client)
+        response = client.post("/api/feeds", data={"url": "http://169.254.169.254/latest/meta-data"})
+        assert response.status_code == 400
+
+    def test_hostname_resolving_to_private_rejected(self, client: TestClient, fake_http, monkeypatch):
+        def private_dns(host, *args, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", 0))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", private_dns)
+        auth_headers(client)
+        response = client.post("/api/feeds", data={"url": "http://internal.example/feed"})
+        assert response.status_code == 400
+
+    def test_redirect_to_internal_rejected(self, client: TestClient, fake_http):
+        # Стартовый URL публичный, но сервер отвечает редиректом на 127.0.0.1.
+        fake_http.add_response("https://example.com/rss", "not-xml", final_url="http://127.0.0.1:8000/health")
+        auth_headers(client)
+        response = client.post("/api/feeds", data={"url": "https://example.com/rss"})
+        assert response.status_code == 400
+
+
+class TestWebSocket:
+    def test_ws_rejects_unauthenticated(self, client: TestClient):
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect("/ws") as websocket:
+                websocket.receive_text()
+
+    def test_ws_accepts_authenticated(self, client: TestClient):
+        auth_headers(client)
+        with client.websocket_connect("/ws") as websocket:
+            data = websocket.receive_json()
+            assert data["type"] == "status"
+            assert "is_running" in data

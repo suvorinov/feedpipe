@@ -25,6 +25,11 @@ scheduler = BackgroundScheduler()
 # Методы, которые меняют состояние на сервере: для них проверяем Origin
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
+# Парсим один раз при старте, а не на каждом запросе (CSRF-мидлварь).
+ALLOWED_ORIGINS = {
+    origin.strip() for origin in os.environ.get("FEEDPIPE_ALLOWED_ORIGINS", "").split(",") if origin.strip()
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -68,7 +73,7 @@ async def csrf_guard(request: Request, call_next):
         source_netloc = urlparse(origin).netloc if origin else (urlparse(referer).netloc if referer else "")
         if source_netloc:
             host = request.headers.get("host", "")
-            allowed = {host, *os.environ.get("FEEDPIPE_ALLOWED_ORIGINS", "").split(",")} - {""}
+            allowed = {host, *ALLOWED_ORIGINS} - {""}
             if source_netloc not in allowed:
                 return JSONResponse(status_code=403, content={"error": "CSRF: недопустимый Origin"})
     return await call_next(request)

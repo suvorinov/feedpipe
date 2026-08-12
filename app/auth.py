@@ -2,12 +2,10 @@ import hashlib
 import hmac
 import os
 
+import bcrypt
 from fastapi import HTTPException, Request
-from passlib.context import CryptContext
 
 from app.db import DATA_DIR
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 COOKIE_NAME = "feedpipe_user"
 # Расширение не может использовать cookie (cross-origin, HttpOnly), поэтому
@@ -31,9 +29,17 @@ def _load_secret() -> bytes:
         with open(SECRET_FILE, "rb") as f:
             return f.read()
 
-    secret = os.urandom(32)
     os.makedirs(DATA_DIR, exist_ok=True)
-    with open(SECRET_FILE, "wb") as f:
+    # O_EXCL: если файл успел создать другой процесс — читаем его секрет.
+    # 0o600: секрет не должен быть виден остальным пользователям системы.
+    try:
+        fd = os.open(SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        with open(SECRET_FILE, "rb") as f:
+            return f.read()
+
+    secret = os.urandom(32)
+    with os.fdopen(fd, "wb") as f:
         f.write(secret)
     return secret
 
@@ -61,13 +67,14 @@ def verify_auth_cookie(value: str | None) -> str | None:
 
 
 def hash_passphrase(passphrase: str) -> str:
-    return pwd_context.hash(passphrase)
+    return bcrypt.hashpw(passphrase.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_passphrase(passphrase: str, hashed: str) -> bool:
     try:
-        return pwd_context.verify(passphrase, hashed)
-    except Exception:
+        return bcrypt.checkpw(passphrase.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        # Битый хэш (не bcrypt-формат) не должен ронять проверку.
         return False
 
 

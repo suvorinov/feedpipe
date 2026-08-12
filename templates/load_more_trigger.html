@@ -1,0 +1,9 @@
+{% if has_more %}
+<div id="lazy-trigger-{{ next_cursor }}"
+     class="lazy-trigger"
+     hx-get="/?view={{ view }}&before={{ next_cursor }}"
+     hx-trigger="intersect once"
+     hx-swap="outerHTML"
+     hx-target="this">
+</div>
+{% endif %}

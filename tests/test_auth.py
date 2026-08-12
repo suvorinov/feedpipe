@@ -31,3 +31,21 @@ class TestVerifyPassphrase:
 
     def test_verify_empty_hash(self):
         assert verify_passphrase("key", "") is False
+
+
+class TestRateLimit:
+    def test_lockout_after_many_failures(self, client):
+        client.post("/api/auth", data={"username": "rluser", "passphrase": "correctkey"})
+        for _ in range(5):
+            client.post("/api/auth", data={"username": "rluser", "passphrase": "wrongkey"})
+        response = client.post("/api/auth", data={"username": "rluser", "passphrase": "correctkey"})
+        assert "Слишком много попыток" in response.text
+
+    def test_correct_key_below_threshold(self, client):
+        client.post("/api/auth", data={"username": "rluser2", "passphrase": "correctkey"})
+        for _ in range(4):
+            client.post("/api/auth", data={"username": "rluser2", "passphrase": "wrongkey"})
+        response = client.post(
+            "/api/auth", data={"username": "rluser2", "passphrase": "correctkey"}, follow_redirects=False
+        )
+        assert response.status_code == 303

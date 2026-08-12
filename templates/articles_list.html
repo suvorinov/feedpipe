@@ -5,14 +5,5 @@
 </article>
 {% endfor %}
 
-{% if has_more %}
-<div class="load-more-wrapper" id="load-more-wrapper">
-    <button class="btn-load-more" id="load-more-btn"
-            hx-get="/?view={{ view }}&before={{ next_cursor }}"
-            hx-target="#load-more-wrapper"
-            hx-swap="outerHTML"
-            hx-indicator="#load-more-btn">
-        {% if lang == 'en' %}Load more{% else %}Загрузить ещё{% endif %}
-    </button>
-</div>
-{% endif %}
+{# Триггер подгружает следующую страницу и сам заменяется её содержимым #}
+{% include "load_more_trigger.html" %}

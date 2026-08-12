@@ -30,12 +30,16 @@ async def _update_article_status(
     if not updated:
         raise HTTPException(404, "Article not found or already has this status")
 
-    inbox_count = repo.get_inbox_count()
-    later_count = repo.get_later_count()
+    # Счётчики тоже из потока: sqlite-вызовы не должны висеть на event loop.
+    inbox_count, later_count = await asyncio.to_thread(_count_statuses, repo)
 
     await manager.broadcast({"type": "counter_update", "inbox_count": inbox_count, "later_count": later_count})
 
     return HTMLResponse(content="", status_code=200)
+
+
+def _count_statuses(repo: ArticleRepository) -> tuple[int, int]:
+    return repo.get_inbox_count(), repo.get_later_count()
 
 
 @router.patch("/api/articles/{article_id}/status")

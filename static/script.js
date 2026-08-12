@@ -47,7 +47,7 @@ function connectWebSocket() {
 function updateSyncStatus() {
     const statusEl = document.getElementById('sync-status');
     const btnEl = document.getElementById('sync-btn');
-    const isEnglish = document.body.dataset.lang === 'en';
+    const isEnglish = document.documentElement.dataset.lang === 'en';
 
     if (isSyncing) {
         statusEl.textContent = isEnglish ? 'SYNC IN PROGRESS...' : 'СИНХРОНИЗАЦИЯ...';
@@ -163,6 +163,41 @@ function showFeedError(message) {
         }, 5000);
     }
 }
+
+// Ошибки добавления фида (400/409) показываются в форме, а не в консоли.
+document.addEventListener('htmx:responseError', function(event) {
+    if (event.detail.xhr.status !== 400 && event.detail.xhr.status !== 409) return;
+    try {
+        const data = JSON.parse(event.detail.xhr.responseText);
+        showFeedError(data.error || 'Неизвестная ошибка!');
+    } catch (e) {
+        showFeedError(event.detail.xhr.responseText || 'Неизвестная ошибка!');
+    }
+    event.preventDefault();
+});
+
+// === ЛОГИКА КНОПОК КАРТОЧКИ СТАТЬИ ===
+// Все три кнопки (отложить/вернуть/очистить) работают одинаково: статус
+// меняется на сервере (htmx-запрос), после успеха карточка анимированно
+// удаляется, счётчики корректируются. Один делегированный обработчик
+// вместо трёх одинаковых hx-on-атрибутов в шаблоне.
+document.addEventListener('htmx:afterRequest', function(event) {
+    const btn = event.detail.elt;
+    if (!btn.classList.contains('card-action') || !event.detail.successful) return;
+
+    const card = document.getElementById('article-' + btn.dataset.cardId);
+    if (!card) return;
+
+    const action = btn.dataset.action;
+    card.classList.add(action === 'purge' ? 'removing' : 'just-held');
+    setTimeout(() => card.remove(), 300);
+
+    if (action === 'restore') {
+        incrementCounter();
+    } else {
+        decrementCounter();
+    }
+});
 
 // === ЛОГИКА ФИЛЬТРАЦИИ ФИДОВ ===
 function filterFeeds() {
