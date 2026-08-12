@@ -4,12 +4,8 @@
 <div class="feeds-wrapper collapsed">
     <input type="text" id="feed-search" class="feed-search" placeholder="{% if lang == 'en' %}Filter...{% else %}Фильтр...{% endif %}" oninput="filterFeeds()">
     <ul class="feed-list">
-        <!-- feeds_list.html -->
         {% for feed in feeds %}
-        <li class="feed-item" data-title="{{ feed.title|lower }}">
-            <span title="{{ feed.url }}">{{ feed.title }}</span>
-            <button hx-delete="/api/feeds/{{ feed.id }}" hx-target="closest li" hx-swap="outerHTML">DEL</button>
-        </li>
+            {% include "feed_item.html" %}
         {% endfor %}
     </ul>
 </div>

@@ -1,11 +1,11 @@
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
 from app.db import write_lock
-from app.parser import clean_html, parse_date, normalize_entry, save_articles
+from app.parser import clean_html, normalize_entry, parse_date, save_articles
 from app.repositories.articles import ArticleRepository
 
 
@@ -20,7 +20,7 @@ class TestCleanHtml:
         assert clean_html("Hello &amp; World") == "Hello & World"
 
     def test_removes_reddit_footer(self):
-        raw = 'Some text submitted by /u/testuser [link] [comments]'
+        raw = "Some text submitted by /u/testuser [link] [comments]"
         assert clean_html(raw) == "Some text"
 
     def test_collapses_whitespace(self):
@@ -152,6 +152,59 @@ class TestSaveArticles:
         assert await save_articles([]) == 0
 
 
+class TestArchiveCleanup:
+    def _seed_article(self, test_db, title: str, link: str, status: str, published_at: str):
+        test_db.execute(
+            "INSERT INTO articles (title, link, status, published_at) VALUES (?, ?, ?, ?)",
+            (title, link, status, published_at),
+        )
+
+    def test_removes_old_archived_keeps_fresh_and_inbox(self, test_db):
+        old_archived = (datetime.now() - timedelta(days=100)).isoformat(sep=" ")
+        recent_archived = (datetime.now() - timedelta(days=10)).isoformat(sep=" ")
+        old_inbox = (datetime.now() - timedelta(days=200)).isoformat(sep=" ")
+        self._seed_article(test_db, "old-archived", "http://old-a", "archived", old_archived)
+        self._seed_article(test_db, "fresh-archived", "http://fresh-a", "archived", recent_archived)
+        self._seed_article(test_db, "old-inbox", "http://old-i", "inbox", old_inbox)
+        test_db.commit()
+
+        from app.repositories.articles import cleanup_archived_articles
+
+        deleted = cleanup_archived_articles()
+        assert deleted == 1
+        remaining = test_db.execute("SELECT title FROM articles").fetchall()
+        assert sorted(r["title"] for r in remaining) == ["fresh-archived", "old-inbox"]
+
+
+class TestKeysetPagination:
+    def test_pages_and_has_more(self, test_db):
+        for i in range(55):
+            test_db.execute(
+                "INSERT INTO articles (title, link, status) VALUES (?, ?, 'inbox')",
+                (f"Article {i}", f"http://a{i}"),
+            )
+        test_db.commit()
+        repo = ArticleRepository(test_db)
+
+        page1, more1 = repo.get_by_status("inbox")
+        assert len(page1) == 50
+        assert more1 is True
+
+        page2, more2 = repo.get_by_status("inbox", before_id=page1[-1]["id"])
+        assert len(page2) == 5
+        assert more2 is False
+
+        ids = [a["id"] for a in page1 + page2]
+        assert ids == sorted(ids, reverse=True)
+
+    def test_no_pagination_when_few_articles(self, test_db):
+        test_db.execute("INSERT INTO articles (title, link, status) VALUES ('A', 'http://a', 'inbox')")
+        test_db.commit()
+        page, more = ArticleRepository(test_db).get_by_status("inbox")
+        assert len(page) == 1
+        assert more is False
+
+
 class TestWriteSerialization:
     def test_update_status_waits_for_write_lock(self, test_db):
         """update_status не падает с 'database is locked', а ждёт завершения записи парсера."""
@@ -167,9 +220,7 @@ class TestWriteSerialization:
         holder.start()
         assert lock_held.wait(timeout=5)
 
-        cursor = test_db.execute(
-            "INSERT INTO articles (title, link, status) VALUES ('B', 'http://b', 'inbox')"
-        )
+        cursor = test_db.execute("INSERT INTO articles (title, link, status) VALUES ('B', 'http://b', 'inbox')")
         test_db.commit()
         article_id = cursor.lastrowid
 

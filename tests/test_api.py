@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -27,56 +26,44 @@ class TestLoginPage:
 
 class TestAuth:
     def test_auth_creates_user_and_returns_redirect(self, client: TestClient):
-        response = client.post("/api/auth", data={
-            "username": "newuser", "passphrase": "secret123"
-        }, follow_redirects=False)
+        response = client.post(
+            "/api/auth", data={"username": "newuser", "passphrase": "secret123"}, follow_redirects=False
+        )
         assert response.status_code == 303
         assert response.headers.get("hx-redirect") == "/"
         assert "feedpipe_user" in response.cookies
         assert response.cookies["feedpipe_user"].startswith("newuser.")
 
     def test_auth_sets_httponly_cookie(self, client: TestClient):
-        response = client.post("/api/auth", data={
-            "username": "user_secure", "passphrase": "key"
-        }, follow_redirects=False)
+        response = client.post(
+            "/api/auth", data={"username": "user_secure", "passphrase": "key"}, follow_redirects=False
+        )
         cookie_header = response.headers.get("set-cookie", "")
         assert "httponly" in cookie_header.lower()
         assert "samesite" in cookie_header.lower()
 
     def test_auth_existing_user_valid_key(self, client: TestClient):
-        client.post("/api/auth", data={
-            "username": "existing", "passphrase": "validkey"
-        })
-        response = client.post("/api/auth", data={
-            "username": "existing", "passphrase": "validkey"
-        }, follow_redirects=False)
+        client.post("/api/auth", data={"username": "existing", "passphrase": "validkey"})
+        response = client.post(
+            "/api/auth", data={"username": "existing", "passphrase": "validkey"}, follow_redirects=False
+        )
         assert response.status_code == 303
         assert response.headers.get("hx-redirect") == "/"
 
     def test_auth_existing_user_wrong_key(self, client: TestClient):
-        client.post("/api/auth", data={
-            "username": "existing2", "passphrase": "correctkey"
-        })
-        response = client.post("/api/auth", data={
-            "username": "existing2", "passphrase": "wrongkey"
-        })
+        client.post("/api/auth", data={"username": "existing2", "passphrase": "correctkey"})
+        response = client.post("/api/auth", data={"username": "existing2", "passphrase": "wrongkey"})
         assert response.status_code == 200
         assert "Invalid key" in response.text
 
     def test_auth_empty_fields(self, client: TestClient):
-        response = client.post("/api/auth", data={
-            "username": "", "passphrase": ""
-        })
+        response = client.post("/api/auth", data={"username": "", "passphrase": ""})
         assert response.status_code == 200
         assert "Заполните все поля" in response.text
 
     def test_auth_username_case_insensitive(self, client: TestClient):
-        client.post("/api/auth", data={
-            "username": "CaseUser", "passphrase": "key"
-        })
-        response = client.post("/api/auth", data={
-            "username": "caseuser", "passphrase": "key"
-        }, follow_redirects=False)
+        client.post("/api/auth", data={"username": "CaseUser", "passphrase": "key"})
+        response = client.post("/api/auth", data={"username": "caseuser", "passphrase": "key"}, follow_redirects=False)
         assert response.status_code == 303
         assert response.headers.get("hx-redirect") == "/"
 
@@ -148,8 +135,14 @@ class TestMainPage:
 
     def test_root_pagination(self, client: TestClient):
         auth_headers(client)
-        response = client.get("/?offset=0")
+        response = client.get("/?before=1")
         assert response.status_code == 200
+
+    def test_root_with_before_and_has_more(self, client: TestClient, seeded_db):
+        auth_headers(client)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "lazy-trigger" not in response.text  # статей мало: дальше нечего грузить
 
 
 class TestUnauthenticatedApi:
@@ -251,10 +244,87 @@ class TestFeeds:
         response = client.delete("/api/feeds/1")
         assert response.status_code == 200
 
+    def test_delete_feed_cascades_articles(self, client: TestClient, seeded_db):
+        auth_headers(client)
+        feed_url = seeded_db.execute("SELECT url FROM feeds WHERE id = 1").fetchone()[0]
+        assert client.delete("/api/feeds/1").status_code == 200
+        remaining = seeded_db.execute("SELECT COUNT(*) FROM articles WHERE source_url = ?", (feed_url,)).fetchone()[0]
+        assert remaining == 0
+
     def test_delete_nonexistent_feed(self, client: TestClient):
         auth_headers(client)
         response = client.delete("/api/feeds/999")
         assert response.status_code == 200
+
+
+class TestCsrf:
+    def test_post_with_foreign_origin_rejected(self, client: TestClient):
+        response = client.post(
+            "/api/feeds",
+            data={"url": "https://evil.example"},
+            headers={"Origin": "https://evil.example"},
+        )
+        assert response.status_code == 403
+
+    def test_patch_with_foreign_origin_rejected(self, client: TestClient):
+        response = client.patch(
+            "/api/articles/1/status",
+            params={"status": "later"},
+            headers={"Origin": "https://evil.example"},
+        )
+        assert response.status_code == 403
+
+    def test_post_same_origin_allowed(self, client: TestClient, fake_http):
+        auth_headers(client)
+        response = client.post(
+            "/api/feeds",
+            data={"url": "https://example.com/rss"},
+            headers={"Origin": "http://testserver"},
+        )
+        assert response.status_code == 200
+
+    def test_post_without_origin_allowed(self, client: TestClient, fake_http):
+        """curl/утилиты не шлют Origin — трактуем как доверенный клиент."""
+        auth_headers(client)
+        response = client.post("/api/feeds", data={"url": "https://example.com/rss"})
+        assert response.status_code == 200
+
+    def test_session_header_skips_csrf(self, client: TestClient, fake_http):
+        """Расширение шлёт chrome-extension:// Origin — его пропускает сессионный заголовок."""
+        client.post("/api/auth", data={"username": "extuser", "passphrase": "extkey"})
+        session = client.cookies.get("feedpipe_user")
+        client.cookies.clear()
+        response = client.post(
+            "/api/feeds",
+            data={"url": "https://example.com/rss"},
+            headers={
+                "X-Feedpipe-Session": session,
+                "Origin": "chrome-extension://abcd1234",
+            },
+        )
+        assert response.status_code == 200
+
+
+class TestSessionHeaderAuth:
+    def test_api_accepts_session_header_without_cookie(self, client: TestClient):
+        client.post("/api/auth", data={"username": "hdruser", "passphrase": "hdrkey"})
+        session = client.cookies.get("feedpipe_user")
+        client.cookies.clear()
+        response = client.get("/api/status", headers={"X-Feedpipe-Session": session})
+        assert response.status_code == 200
+
+    def test_api_rejects_invalid_session_header(self, client: TestClient):
+        response = client.get("/api/status", headers={"X-Feedpipe-Session": "admin.bad"})
+        assert response.status_code == 401
+
+
+class TestHealth:
+    def test_health_ok(self, client: TestClient):
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["db"] == "ok"
 
 
 class TestManifest:
@@ -270,9 +340,9 @@ class TestAuthFlow:
         assert "AUTH" in response.text
 
         # 2. Login (without following redirect so we can read the cookie)
-        response = client.post("/api/auth", data={
-            "username": "flowuser", "passphrase": "flowkey"
-        }, follow_redirects=False)
+        response = client.post(
+            "/api/auth", data={"username": "flowuser", "passphrase": "flowkey"}, follow_redirects=False
+        )
         assert response.status_code == 303
         cookie = response.cookies.get("feedpipe_user")
         assert cookie is not None

@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FEEDPIPE // SYSTEM INTERFACE</title>
-    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.js" integrity="sha384-Q+Dky3iHVJOr6wUjQ4ulh6uQ76an/t+ak1+PjMVaxRjbZamFLAG+u9InkfjbsEQf" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.js" integrity="sha384-Q+Dky3iHVJOr6wUjQ4ulh6uQ76an/t+ak1+PjMVaxRjbZamFLAG+u9InkfjbsEQf" crossorigin="anonymous" defer></script>
+    <link rel="stylesheet" href="/static/style.css?v=4">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="manifest" href="/manifest.json">
     <!-- Это заставит мобильный Safari и Chrome раскрасить строку состояния в цвет темы -->
     <meta name="theme-color" content="#00ff9d"> 
 
-    <script src="/static/script.js"></script>
+    <script src="/static/script.js" defer></script>
 </head>
 
 <body>
@@ -52,10 +52,10 @@
                 {% include "empty_state.html" %}
             {% endfor %}
 
-            {# Триггер бесконечной прокрутки #}
-            {% if next_offset < view_count %}
+            {# Триггер бесконечной прокрутки: следующая страница продолжается после последней карточки #}
+            {% if has_more %}
             <div id="lazy-trigger-0" 
-                hx-get="/?view={{ view }}&offset={{ next_offset }}" 
+                hx-get="/?view={{ view }}&before={{ next_cursor }}" 
                 hx-trigger="intersect once" 
                 hx-swap="beforeend"
                 hx-target="#feed-list">

@@ -1,18 +1,17 @@
 import logging
+import sqlite3
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
-import sqlite3
 
-from app.auth import COOKIE_NAME, verify_auth_cookie
+from app.auth import COOKIE_NAME, SESSION_HEADER, verify_auth_cookie
 from app.db import get_db
 from app.repositories.articles import ArticleRepository
 from app.repositories.feeds import FeedRepository
+from app.sync_state import SYNC_STATUS
 from app.template_filters import templates
 from app.ws_manager import manager
-from app.sync_state import SYNC_STATUS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,12 +29,14 @@ async def manifest() -> FileResponse:
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        await websocket.send_json({
-            "type": "status",
-            "is_running": SYNC_STATUS["is_running"],
-            "last_sync": SYNC_STATUS["last_sync"],
-            "count": SYNC_STATUS["last_count"],
-        })
+        await websocket.send_json(
+            {
+                "type": "status",
+                "is_running": SYNC_STATUS["is_running"],
+                "last_sync": SYNC_STATUS["last_sync"],
+                "count": SYNC_STATUS["last_count"],
+            }
+        )
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
@@ -46,12 +47,14 @@ async def websocket_endpoint(websocket: WebSocket):
 def read_root(
     request: Request,
     db: sqlite3.Connection = Depends(get_db),
-    lang: Optional[str] = None,
-    feedpipe_lang: Optional[str] = Cookie(None),
+    lang: str | None = None,
+    feedpipe_lang: str | None = Cookie(None),
     view: str = "inbox",
-    offset: int = 0,
+    before: int | None = None,
 ) -> HTMLResponse:
     user = verify_auth_cookie(request.cookies.get(COOKIE_NAME))
+    if not user:
+        user = verify_auth_cookie(request.headers.get(SESSION_HEADER))
     is_auth = bool(user)
     current_lang = lang or feedpipe_lang or "ru"
 
@@ -62,7 +65,7 @@ def read_root(
     later_count = article_repo.get_later_count()
 
     status = "later" if view == "later" else "inbox"
-    articles = article_repo.get_by_status(status, offset)
+    articles, has_more = article_repo.get_by_status(status, before_id=before)
     feeds = feed_repo.get_all()
 
     if not is_auth:
@@ -78,8 +81,8 @@ def read_root(
         "feeds": feeds,
         "lang": current_lang,
         "view": view,
-        "view_count": later_count if view == "later" else inbox_count,
-        "next_offset": offset + 50,
+        "has_more": has_more,
+        "next_cursor": articles[-1]["id"] if has_more and articles else None,
         "user": user,
     }
 

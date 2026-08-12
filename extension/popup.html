@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <style>
         body {
@@ -12,10 +12,20 @@
         }
         h3 { color: #00ff9d; font-size: 14px; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 5px;}
         p { color: #666; font-size: 11px; }
+        .row { display: flex; gap: 8px; margin-bottom: 10px; }
+        input[type="text"] {
+            flex: 1;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            padding: 6px 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
         button {
             width: 100%;
-            margin-top: 10px;
-            padding: 8px;
+            margin-top: 8px;
+            padding: 6px;
             background: transparent;
             color: #00ff9d;
             border: 1px solid #00ff9d;
@@ -24,15 +34,26 @@
             text-transform: uppercase;
         }
         button:hover { background: #00ff9d; color: #0e0e0e; }
+        button.primary { background: #00ff9d; color: #0e0e0e; }
+        button.primary:hover { background: #00d889; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .row button { width: auto; margin-top: 0; }
         #status { margin-top: 10px; font-size: 11px; }
         .success { color: #00ff9d; }
         .error { color: #ff3333; }
+        .muted { color: #666; }
     </style>
 </head>
 <body>
     <h3>> Feedpipe</h3>
+    <div class="row">
+        <input type="text" id="server-url" placeholder="http://host:port">
+        <button id="save-server">save</button>
+    </div>
     <p id="url-display">Определение URL...</p>
-    <button id="inject-btn">[ + ] inject</button>
+    <p id="auth-status" class="muted">Проверка сессии...</p>
+    <button id="open-server" class="muted">открыть сервер</button>
+    <button id="inject-btn" class="primary" disabled>[ + ] inject</button>
     <div id="status"></div>
 
     <script src="popup.js"></script>

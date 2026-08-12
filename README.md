@@ -59,10 +59,27 @@ docker-compose up -d
 | GET | `/` | Главная страница |
 | GET | `/ws` | WebSocket |
 | POST | `/api/feeds` | Добавить фид |
-| DELETE | `/api/feeds/{id}` | Удалить фид |
+| DELETE | `/api/feeds/{id}` | Удалить фид (вместе со статьями) |
 | PATCH | `/api/articles/{id}/status?status=later\|inbox\|archived` | Изменить статус статьи |
 | POST | `/api/sync` | Запустить синхронизацию |
 | GET | `/api/status` | Статус синхронизации |
+| GET | `/health` | Healthcheck (включая БД) |
+
+### Авторизация
+
+- Обычный пользователь: cookie `feedpipe_user` (HMAC-подпись), HttpOnly, SameSite=Lax.
+- Расширение: та же подписанная сессия заголовком `X-Feedpipe-Session` (cookie cross-origin не отправилась бы).
+- CSRF: изменяющие запросы с Origin/Referer проверяются на совпадение с Host. Дополнительные доверенные origins — через `FEEDPIPE_ALLOWED_ORIGINS` (через запятую).
+
+### Пагинация
+
+Список статей — keyset-пагинация по id: `/?view=inbox&before=123` (следующая страница после id 123).
+
+## Расширение
+
+`extension/` — Chrome-расширение «Feedpipe Injector». В попапе укажите адрес сервера.
+Авторизация — автоматически: расширение читает валидную сессию из cookie-хранилища браузера
+(достаточно один раз войти на сервере в этом браузере).
 
 ## Структура
 
@@ -73,4 +90,12 @@ app/
   parser.py    # Парсинг RSS/Atom
 templates/     # HTML шаблоны
 static/        # CSS, JS
+```
+
+## Качество кода
+
+```bash
+make lint      # ruff check
+make fmt       # ruff format
+make test      # pytest
 ```

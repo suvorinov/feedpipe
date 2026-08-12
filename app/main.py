@@ -1,21 +1,29 @@
 import asyncio
 import logging
 import os
-
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
+
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.db import init_db
+from app.auth import SESSION_HEADER
+from app.db import get_db, init_db
+from app.repositories.articles import cleanup_archived_articles
+from app.routers import articles, auth, feeds, sync, web
 from app.sync_state import fire_and_forget_sync, set_main_loop
-from app.routers import auth, articles, feeds, sync, web
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler()
+
+# Методы, которые меняют состояние на сервере: для них проверяем Origin
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 @asynccontextmanager
@@ -28,6 +36,13 @@ async def lifespan(app: FastAPI):
         id="auto_sync",
         replace_existing=True,
     )
+    # Раз в сутки вычищаем архив: статусы "archived" старше N дней удаляются.
+    scheduler.add_job(
+        cleanup_archived_articles,
+        CronTrigger(hour=4, minute=0),
+        id="archive_cleanup",
+        replace_existing=True,
+    )
     scheduler.start()
     try:
         yield
@@ -37,9 +52,38 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Feedpipe API", lifespan=lifespan)
 
+
+@app.middleware("http")
+async def csrf_guard(request: Request, call_next):
+    """Защита от CSRF: на изменяющих запросах Origin/Referer должен быть "своим".
+
+    Браузер сам шлёт Origin на POST-запросы, поэтому отсутствие Origin
+    (curl, утилиты) трактуем как доверенный клиент вне браузера.
+    Запросы с заголовком X-Feedpipe-Session идут из расширения
+    (chrome-extension:// origin) — их пропускаем.
+    """
+    if request.method in UNSAFE_METHODS and not request.headers.get(SESSION_HEADER):
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+        source_netloc = urlparse(origin).netloc if origin else (urlparse(referer).netloc if referer else "")
+        if source_netloc:
+            host = request.headers.get("host", "")
+            allowed = {host, *os.environ.get("FEEDPIPE_ALLOWED_ORIGINS", "").split(",")} - {""}
+            if source_netloc not in allowed:
+                return JSONResponse(status_code=403, content={"error": "CSRF: недопустимый Origin"})
+    return await call_next(request)
+
+
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    try:
+        conn = get_db()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+        return {"status": "ok", "db": "ok"}
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "degraded", "db": "error"})
+
 
 app.include_router(auth.router)
 app.include_router(articles.router)

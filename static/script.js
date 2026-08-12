@@ -7,7 +7,13 @@ function connectWebSocket() {
     ws = new WebSocket(protocol + '//' + window.location.host + '/ws');
 
     ws.onmessage = function(event) {
-        const data = JSON.parse(event.data);
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch (e) {
+            console.error('WS: невалидное сообщение', event.data);
+            return;
+        }
 
         if (data.type === 'status') {
             isSyncing = data.is_running;
@@ -22,6 +28,7 @@ function connectWebSocket() {
             updateSyncStatus();
             updateCounter(data.count);
             flashSyncButton();
+            refreshFeedIfEmpty(data.count);
         }
         else if (data.type === 'sync_error') {
             isSyncing = false;
@@ -60,6 +67,9 @@ function updateCounter(count) {
         el.style.color = '#00ff9d';
         setTimeout(() => el.style.color = '', 1000);
     }
+
+    const navInboxEl = document.getElementById('nav-tabs-inbox-count');
+    if (navInboxEl) navInboxEl.textContent = count;
 }
 
 function decrementCounter() {
@@ -118,6 +128,24 @@ function flashSyncButton() {
         btn.style.background = '';
         btn.style.color = '';
     }, 1000);
+}
+
+// После синхронизации, если в ленте показывалось пустое состояние,
+// перерисовываем список статей, не трогая остальную страницу.
+// Условия:
+//   - лента ещё пустая (иначе ничего не делаем — читающий пользователь не дёргается);
+//   - синк действительно принёс записи во Входящие (count > 0);
+//   - мы на вкладке Входящие: отложенные синхронизация не наполняет.
+function refreshFeedIfEmpty(inboxCount) {
+    const feedList = document.getElementById('feed-list');
+    if (!feedList || !feedList.querySelector('.empty-state')) return;
+    if (inboxCount <= 0) return;
+    if (document.documentElement.dataset.view !== 'inbox') return;
+
+    htmx.ajax('GET', '/?view=inbox', {
+        target: '#feed-list',
+        swap: 'innerHTML',
+    });
 }
 
 function changeLang(lang) {

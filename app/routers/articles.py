@@ -1,9 +1,9 @@
 import asyncio
 import logging
+import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-import sqlite3
 
 from app.auth import get_current_user
 from app.db import get_db
@@ -33,11 +33,7 @@ async def _update_article_status(
     inbox_count = repo.get_inbox_count()
     later_count = repo.get_later_count()
 
-    await manager.broadcast({
-        "type": "counter_update",
-        "inbox_count": inbox_count,
-        "later_count": later_count
-    })
+    await manager.broadcast({"type": "counter_update", "inbox_count": inbox_count, "later_count": later_count})
 
     return HTMLResponse(content="", status_code=200)
 
@@ -53,15 +49,21 @@ async def update_article_status(
 
 
 @router.delete("/api/articles/{article_id}")
-async def delete_article(article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def delete_article(
+    article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)
+):
     return await _update_article_status(article_id, "archived", db)
 
 
 @router.patch("/api/articles/{article_id}/hold")
-async def hold_article(article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def hold_article(
+    article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)
+):
     return await _update_article_status(article_id, "later", db)
 
 
 @router.patch("/api/articles/{article_id}/restore")
-async def restore_article(article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)):
+async def restore_article(
+    article_id: int, user: str = Depends(get_current_user), db: sqlite3.Connection = Depends(get_db)
+):
     return await _update_article_status(article_id, "inbox", db)

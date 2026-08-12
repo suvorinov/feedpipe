@@ -8,9 +8,7 @@ class UserRepository:
         self.conn = conn
 
     def find_by_username(self, username: str) -> dict | None:
-        row = self.conn.execute(
-            "SELECT * FROM users WHERE username = ?", (username,)
-        ).fetchone()
+        row = self.conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         return dict(row) if row else None
 
     def create(self, username: str, secret_hash: str) -> None:

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.template_filters import format_date
 
@@ -18,7 +18,7 @@ class TestFormatDate:
         assert isinstance(format_date(value), str)
 
     def test_timezone_aware_datetime_does_not_crash(self):
-        value = datetime.now(timezone.utc) - timedelta(hours=1)
+        value = datetime.now(UTC) - timedelta(hours=1)
         assert "ч назад" in format_date(value)
 
     def test_future_date(self):

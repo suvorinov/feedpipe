@@ -1,19 +1,19 @@
 import asyncio
 import logging
 import re
+import sqlite3
 from urllib.parse import urljoin, urlparse
 
 import feedparser
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-import sqlite3
 
 from app.auth import get_current_user
 from app.db import get_db
 from app.repositories.feeds import FeedRepository
-from app.template_filters import templates
 from app.sync_state import run_parser_async
+from app.template_filters import templates
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,7 +47,8 @@ async def add_feed(
                 match = re.search(
                     r'<link\b(?=[^>]*type=["\']application/(?:rss|atom)\+xml["\'])'
                     r'(?=[^>]*href=["\']([^"\']+)["\'])[^>]*>',
-                    resp.text, re.IGNORECASE,
+                    resp.text,
+                    re.IGNORECASE,
                 )
                 if match:
                     found_rss = match.group(1)
@@ -66,35 +67,22 @@ async def add_feed(
 
             if parsed.bozo and not parsed.entries:
                 return JSONResponse(
-                    status_code=400,
-                    content={"error": f"Фид повреждён или пуст: {str(parsed.bozo_exception)[:100]}!"}
+                    status_code=400, content={"error": f"Фид повреждён или пуст: {str(parsed.bozo_exception)[:100]}!"}
                 )
 
             title = parsed.feed.get("title", url)
     except httpx.TimeoutException:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Таймаут при получении фида!"}
-        )
+        return JSONResponse(status_code=400, content={"error": "Таймаут при получении фида!"})
     except httpx.HTTPStatusError as e:
-        return JSONResponse(
-            status_code=400,
-            content={"error": f"Ошибка HTTP: {e.response.status_code}!"}
-        )
+        return JSONResponse(status_code=400, content={"error": f"Ошибка HTTP: {e.response.status_code}!"})
     except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={"error": f"Не удалось распознать фид: {str(e)[:100]}!"}
-        )
+        return JSONResponse(status_code=400, content={"error": f"Не удалось распознать фид: {str(e)[:100]}!"})
 
     repo = FeedRepository(db)
     try:
         await asyncio.to_thread(repo.add, url, title)
     except sqlite3.IntegrityError:
-        return JSONResponse(
-            status_code=409,
-            content={"error": "Уже подписан!"}
-        )
+        return JSONResponse(status_code=409, content={"error": "Уже подписан!"})
 
     background_tasks.add_task(run_parser_async)
 

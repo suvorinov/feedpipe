@@ -1,0 +1,4 @@
+<li class="feed-item" data-title="{{ feed.title|lower }}">
+    <span title="{{ feed.url }}">{{ feed.title }}</span>
+    <button hx-delete="/api/feeds/{{ feed.id }}" hx-target="closest li" hx-swap="outerHTML">DEL</button>
+</li>

@@ -10,6 +10,10 @@ from app.db import DATA_DIR
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 COOKIE_NAME = "feedpipe_user"
+# Расширение не может использовать cookie (cross-origin, HttpOnly), поэтому
+# та же подписанная сессия принимается и в заголовке. Это эквивалент cookie:
+# кто знает валидную подпись — тот авторизован.
+SESSION_HEADER = "X-Feedpipe-Session"
 SECRET_FILE = os.path.join(DATA_DIR, "secret.key")
 
 
@@ -69,6 +73,8 @@ def verify_passphrase(passphrase: str, hashed: str) -> bool:
 
 def get_current_user(request: Request) -> str:
     user = verify_auth_cookie(request.cookies.get(COOKIE_NAME))
+    if not user:
+        user = verify_auth_cookie(request.headers.get(SESSION_HEADER))
     if not user:
         if request.headers.get("HX-Request") == "true":
             raise HTTPException(

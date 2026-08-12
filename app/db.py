@@ -47,12 +47,14 @@ CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source_url);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
 """
 
+
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     try:
         conn.execute("SELECT 1 FROM articles LIMIT 1")
     except sqlite3.OperationalError:
         conn.executescript(SCHEMA_SQL)
         conn.commit()
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False, isolation_level="DEFERRED")
@@ -61,11 +63,13 @@ def get_db():
     _ensure_schema(conn)
     return conn
 
+
 def init_db():
     with write_lock:
         conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level="DEFERRED")
         conn.executescript(SCHEMA_SQL)
         conn.close()
+
 
 def migrate_feeds_txt():
     """Одноразовая функция: переносит ссылки из feeds.txt в БД при первом запуске"""
@@ -78,7 +82,7 @@ def migrate_feeds_txt():
         conn = get_db()
         cursor = conn.cursor()
 
-        with open(txt_path, "r", encoding="utf-8") as f:
+        with open(txt_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):

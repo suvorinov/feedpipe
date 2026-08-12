@@ -50,11 +50,13 @@ async def run_parser_async() -> None:
         SYNC_STATUS["last_sync"] = datetime.now().isoformat()
         SYNC_STATUS["last_count"] = new_count
 
-        await manager.broadcast({
-            "type": "sync_complete",
-            "count": new_count,
-            "timestamp": SYNC_STATUS["last_sync"],
-        })
+        await manager.broadcast(
+            {
+                "type": "sync_complete",
+                "count": new_count,
+                "timestamp": SYNC_STATUS["last_sync"],
+            }
+        )
     except Exception as e:
         logger.error(f"Parser error: {e}")
         await manager.broadcast({"type": "sync_error", "error": str(e)})

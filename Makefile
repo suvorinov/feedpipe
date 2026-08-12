@@ -1,4 +1,4 @@
-.PHONY: help build up up-attach down logs restart parse dev shell clean
+.PHONY: help build up up-attach down logs restart parse dev shell clean install-dev lint lint-fix fmt test
 
 # ========================
 # Справка
@@ -41,7 +41,7 @@ parse: ## Запустить парсер (сбор фидов)
 # ========================
 
 dev: ## Запустить сервис в режиме разработки (авто-перезагрузка, только loopback)
-	.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8700
+	.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8700
 
 shell: ## Открыть shell в контейнере
 	docker compose exec feedpipe /bin/bash
@@ -49,3 +49,25 @@ shell: ## Открыть shell в контейнере
 clean: ## Остановить и очистить volumes
 	docker compose down -v
 	docker system prune -f
+
+# ========================
+# Качество кода
+# ========================
+
+install-dev: ## Установить dev-зависимости (ruff)
+	.venv/bin/pip install -r requirements-dev.txt
+
+lint: ## Проверить код линтером
+	.venv/bin/ruff check .
+
+lint-fix: ## Автоисправить замечания линтера
+	.venv/bin/ruff check --fix .
+
+fmt: ## Отформатировать код
+	.venv/bin/ruff format .
+
+fmt-check: ## Проверить форматирование
+	.venv/bin/ruff format --check .
+
+test: ## Прогнать тесты
+	.venv/bin/python -m pytest -q

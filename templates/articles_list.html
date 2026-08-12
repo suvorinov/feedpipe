@@ -5,10 +5,10 @@
 </article>
 {% endfor %}
 
-{% if next_offset < view_count %}
+{% if has_more %}
 <div class="load-more-wrapper" id="load-more-wrapper">
     <button class="btn-load-more" id="load-more-btn"
-            hx-get="/?view={{ view }}&offset={{ next_offset }}"
+            hx-get="/?view={{ view }}&before={{ next_cursor }}"
             hx-target="#load-more-wrapper"
             hx-swap="outerHTML"
             hx-indicator="#load-more-btn">
