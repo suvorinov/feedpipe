@@ -1,9 +1,10 @@
+import os
 from datetime import datetime
 
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-TEMPLATES_DIR = "templates"
+TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
 
 
 def format_date(value: datetime | str | None) -> str:
