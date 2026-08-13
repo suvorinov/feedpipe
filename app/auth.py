@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import os
+from functools import lru_cache
 
 import bcrypt
 from fastapi import HTTPException, Request
@@ -21,11 +22,13 @@ SECRET_FILE = os.path.join(DATA_DIR, "secret.key")
 SECURE_COOKIE = os.environ.get("FEEDPIPE_SECURE_COOKIE", "0").lower() in ("1", "true", "yes", "on")
 
 
+@lru_cache(maxsize=1)
 def _load_secret() -> bytes:
     """Возвращает секрет для подписи cookie.
 
     Приоритет: переменная окружения FEEDPIPE_SECRET -> файл в DATA_DIR.
     Файл создаётся один раз, чтобы сессии переживали перезапуск приложения.
+    Результат кэшируется в памяти для производительности.
     """
     secret = os.environ.get("FEEDPIPE_SECRET")
     if secret:
